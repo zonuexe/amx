@@ -279,7 +279,9 @@ Set this to nil to disable fuzzy matching."
   'smex-initialize-ido 'ido-common-initialization
   "4.0")
 
-(defsubst smex-save-file-not-empty-p ()
+(define-obsolete-function-alias
+  'smex-save-file-not-empty-p 'smex-buffer-not-empty-p "4.0")
+(defsubst smex-buffer-not-empty-p ()
   (string-match-p "\[^[:space:]\]" (buffer-string)))
 
 (defun smex-load-save-file ()
@@ -291,7 +293,7 @@ Set this to nil to disable fuzzy matching."
           (condition-case nil
               (setq smex-history (read (current-buffer))
                     smex-data    (read (current-buffer)))
-            (error (if (smex-save-file-not-empty-p)
+            (error (if (smex-buffer-not-empty-p)
                        (error "Invalid data in smex-save-file (%s). Can't restore history."
                               smex-save-file)
                      (unless (boundp 'smex-history) (setq smex-history nil))
