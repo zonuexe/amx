@@ -118,7 +118,7 @@ Set this to nil to disable fuzzy matching."
   (interactive)
   (unless smex-initialized-p
     (smex-initialize))
-  (if (smex-already-running)
+  (if (smex-active)
       (smex-update-and-rerun)
     (and smex-auto-update (smex-update-if-needed))
     (smex-read-and-run smex-ido-cache)))
