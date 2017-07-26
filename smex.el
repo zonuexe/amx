@@ -212,12 +212,22 @@ This should work for most completion backends."
 
 (defun smex-completing-read-default (choices initial-input)
   "Smex backend for default Emacs completion"
-  (let ((minibuffer-completion-table choices))
-    (minibuffer-with-setup-hook
-        (lambda ()
-          (use-local-map (make-composed-keymap (list smex-map (current-local-map)))))
-      (completing-read (smex-prompt-with-prefix-arg) choices nil t
-                       initial-input 'extended-command-history (car choices)))))
+  (require 'minibuf-eldef)
+  (let ((minibuffer-completion-table choices)
+        (prompt (concat (smex-prompt-with-prefix-arg)
+                        (format " [%s]: " (car choices))))
+        (prev-eldef-mode minibuffer-electric-default-mode))
+    (unwind-protect
+        (progn
+          (minibuffer-electric-default-mode 1)
+          (minibuffer-with-setup-hook
+              (lambda ()
+                (use-local-map (make-composed-keymap
+                                (list smex-map (current-local-map)))))
+            (completing-read prompt choices nil t initial-input
+                             'extended-command-history (car choices))))
+      (minibuffer-electric-default-mode
+       (if prev-eldef-mode 1 0)))))
 
 (defun smex-default-get-text ()
   "Default function for getting the user's current text input.
