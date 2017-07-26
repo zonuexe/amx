@@ -129,8 +129,10 @@ Set this to nil to disable fuzzy matching."
 (define-obsolete-function-alias 'smex-already-running 'smex-active "4.0")
 
 (defun smex-update-and-rerun ()
-  (smex-do-with-selected-item
-   (lambda (_) (smex-update) (smex-read-and-run smex-ido-cache ido-text))))
+  (let ((new-initial-input
+         (funcall (smex-backend-get-text-fun (smex-get-backend)))))
+    (smex-do-with-selected-item
+     (lambda (_) (smex-update) (smex-read-and-run smex-ido-cache new-initial-input)))))
 
 (defun smex-read-and-run (commands &optional initial-input)
   (let* ((chosen-item-name (smex-completing-read commands initial-input))
@@ -179,21 +181,23 @@ Set this to nil to disable fuzzy matching."
 
 (cl-defstruct smex-backend
   name
-  compfun
-  exitfun)
+  comp-fun
+  exit-fun
+  get-text-fun)
 
 (defvar smex-known-backends nil)
 
-(cl-defun smex-define-backend (name compfun &optional (exitfun 'exit-minibuffer))
+(cl-defun smex-define-backend (name comp-fun exit-fun get-text-fun)
   (declare (indent 1))
   (let ((backend
          (make-smex-backend :name name
-                            :compfun compfun
-                            :exitfun exitfun)))
+                            :comp-fun comp-fun
+                            :exit-fun exit-fun
+                            :get-text-fun get-text-fun)))
     (setq smex-known-backends
           (plist-put smex-known-backends name backend))))
 
-(defun smex-get-backend (backend)
+(cl-defun smex-get-backend (&optional (backend smex-backend))
   (cond
    ((smex-backend-p backend)
     backend)
@@ -208,9 +212,17 @@ Set this to nil to disable fuzzy matching."
           (use-local-map (make-composed-keymap (list smex-map (current-local-map)))))
       (completing-read (smex-prompt-with-prefix-arg) choices nil t
                        initial-input 'extended-command-history (car choices)))))
+
+(defun smex-default-get-text ()
+  "Default function for getting the user's current text input.
+
+May not work for things like ido and ivy."
+  (buffer-substring-no-properties (minibuffer-prompt-end) (point-max)))
+
 (smex-define-backend 'standard
   'smex-completing-read-default
-  'exit-minibuffer)
+  'exit-minibuffer
+  'smex-default-get-text)
 
 (defun smex-completing-read-ido (choices initial-input)
   "Smex backend for ido completion"
@@ -222,19 +234,30 @@ Set this to nil to disable fuzzy matching."
         (minibuffer-completion-table choices))
     (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
                           initial-input 'extended-command-history (car choices))))
+
+(defun smex-ido-get-text ()
+  ido-text)
+
 (smex-define-backend 'ido
   'smex-completing-read-ido
-  'ido-exit-minibuffer)
+  'ido-exit-minibuffer
+  'smex-ido-get-text)
 
 (defun smex-completing-read-ivy (choices initial-input)
   "Smex backend for ivy completion"
   (ivy-read (smex-prompt-with-prefix-arg) choices
                 :keymap smex-map
                 :history 'extended-command-history
+                :initial-input initial-input
                 :preselect (car choices)))
+
+(defun smex-ivy-get-text ()
+  ivy-text)
+
 (smex-define-backend 'ivy
   'smex-completing-read-ivy
-  'ivy-done)
+  'ivy-done
+  'smex-ivy-get-text)
 
 (defun smex-completing-read-auto (choices initial-input)
   (let ((smex-backend
@@ -245,12 +268,13 @@ Set this to nil to disable fuzzy matching."
     (smex-completing-read choices initial-input)))
 (smex-define-backend 'auto
   'smex-completing-read-auto
-  (lambda () (error "This function should never be called.")))
+  (lambda () (error "This exit function should never be called."))
+  (lambda () (error "This get-text function should never be called.")))
 
 (defun smex-completing-read (choices initial-input)
   (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
-        (compfun (smex-backend-compfun (smex-get-backend smex-backend))))
-    (funcall compfun choices initial-input)))
+        (comp-fun (smex-backend-comp-fun (smex-get-backend))))
+    (funcall comp-fun choices initial-input)))
 
 (defun smex-prompt-with-prefix-arg ()
   (if (not current-prefix-arg)
@@ -501,7 +525,7 @@ Returns nil when reaching the end of the list."
 
 (defun smex-exit-minibuffer ()
   (interactive)
-  (funcall (smex-backend-exitfun (smex-get-backend smex-backend))))
+  (funcall (smex-backend-exit-fun (smex-get-backend))))
 
 (defun smex-do-with-selected-item (fn)
   (setq smex-custom-action fn)
