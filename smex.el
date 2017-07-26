@@ -90,10 +90,7 @@ Must be set before initializing Smex."
   "String to display in the Smex prompt."
   :type 'string)
 
-(defcustom smex-flex-matching t
-  "Enables Ido flex matching. On by default.
-Set this to nil to disable fuzzy matching."
-  :type 'boolean)
+(define-obsolete-variable-alias 'smex-flex-matching 'ido-enable-flex-matching "4.0")
 
 (defvar smex-initialized-p nil)
 (defvar smex-cache)
@@ -228,9 +225,6 @@ May not work for things like ido and ivy."
   "Smex backend for ido completion"
   (let ((ido-completion-map ido-completion-map)
         (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
-        (ido-enable-prefix nil)
-        (ido-enable-flex-matching smex-flex-matching)
-        (ido-max-prospects 10)
         (minibuffer-completion-table choices))
     (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
                           initial-input 'extended-command-history (car choices))))
