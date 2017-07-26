@@ -188,18 +188,28 @@ This should work for most completion backends."
         (comp-fun (smex-backend-comp-fun (smex-get-backend))))
     (funcall comp-fun choices :initial-input initial-input :predicate predicate)))
 
+;; TODO rehome
+(defvar smex-temp-prompt-string nil
+  "if non-nil, overrides `smex-prompt-string' once.
+
+Each time `smex-prompt-with-prefix-arg' is called, this is reset
+to nil.")
+
 (defun smex-prompt-with-prefix-arg ()
-  (if (not current-prefix-arg)
-      smex-prompt-string
-    (concat
-     (if (eq current-prefix-arg '-)
-         "- "
-       (if (integerp current-prefix-arg)
-           (format "%d " current-prefix-arg)
-         (if (= (car current-prefix-arg) 4)
-             "C-u "
-           (format "%d " (car current-prefix-arg)))))
-     smex-prompt-string)))
+  (let ((smex-prompt-string
+         (or smex-temp-prompt-string smex-prompt-string)))
+    (setq smex-temp-prompt-string nil)
+    (if (not current-prefix-arg)
+        smex-prompt-string
+      (concat
+       (if (eq current-prefix-arg '-)
+           "- "
+         (if (integerp current-prefix-arg)
+             (format "%d " current-prefix-arg)
+           (if (= (car current-prefix-arg) 4)
+               "C-u "
+             (format "%d " (car current-prefix-arg)))))
+       smex-prompt-string))))
 
 ;; TODO join the other defvars
 (defvar smex-known-backends nil)
