@@ -4,8 +4,8 @@
 ;;
 ;; Author: Cornelius Mika <cornelius.mika@gmail.com> and contributors
 ;; URL: http://github.com/nonsequitur/smex/
-;; Package-Requires: ((emacs "24") (ido-completing-read+ "3.0") (ivy "0"))
-;; Version: 3.0
+;; Package-Requires: ((emacs "24.4") (ido-completing-read+ "4.1") (ivy "0"))
+;; Version: 4.0
 ;; Keywords: convenience, usability
 
 ;; This file is not part of GNU Emacs.
