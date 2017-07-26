@@ -190,11 +190,16 @@ This should work for most completion backends."
 
 (defvar smex-known-backends nil)
 
-(cl-defun smex-define-backend (name comp-fun get-text-fun &optional
+(cl-defun smex-define-backend (&key name comp-fun get-text-fun
                                     (exit-fun 'smex-default-exit-minibuffer))
-  (declare (indent 1)
-           (advertised-calling-convention
-            (name comp-fun get-text-fun &optional exit-fun) nil))
+  (cl-assert
+   (and (symbolp name)
+                  (functionp comp-fun)
+                  (functionp get-text-fun)
+                  (functionp exit-fun))
+   nil
+   "Invalid smex backend spec: (:name %S :comp-fun %S :get-text-fun %S :exit-fun %S)"
+   (list name comp-fun get-text-fun exit-fun))
   (let ((backend
          (make-smex-backend :name name
                             :comp-fun comp-fun
@@ -235,9 +240,10 @@ This should work for most completion backends."
 May not work for things like ido and ivy."
   (buffer-substring-no-properties (minibuffer-prompt-end) (point-max)))
 
-(smex-define-backend 'standard
-  'smex-completing-read-default
-  'smex-default-get-text)
+(smex-define-backend
+ :name 'standard
+ :comp-fun 'smex-completing-read-default
+ :get-text-fun 'smex-default-get-text)
 
 (defun smex-completing-read-ido (choices initial-input)
   "Smex backend for ido completion"
@@ -250,9 +256,10 @@ May not work for things like ido and ivy."
 (defun smex-ido-get-text ()
   ido-text)
 
-(smex-define-backend 'ido
-  'smex-completing-read-ido
-  'smex-ido-get-text)
+(smex-define-backend
+ :name 'ido
+ :comp-fun 'smex-completing-read-ido
+ :get-text-fun 'smex-ido-get-text)
 
 (defun smex-completing-read-ivy (choices initial-input)
   "Smex backend for ivy completion"
@@ -265,21 +272,24 @@ May not work for things like ido and ivy."
 (defun smex-ivy-get-text ()
   ivy-text)
 
-(smex-define-backend 'ivy
-  'smex-completing-read-ivy
-  'smex-ivy-get-text)
+(smex-define-backend
+ :name 'ivy
+ :comp-fun 'smex-completing-read-ivy
+ :get-text-fun 'smex-ivy-get-text)
 
 (defun smex-completing-read-auto (choices initial-input)
+  "Automatically select between ivy, ido, and standard completion."
   (let ((smex-backend
          (cond
           (ivy-mode 'ivy)
           (ido-mode 'ido)
           (t 'standard))))
     (smex-completing-read choices initial-input)))
-(smex-define-backend 'auto
-  'smex-completing-read-auto
-  (lambda () (error "This exit function should never be called."))
-  (lambda () (error "This get-text function should never be called.")))
+(smex-define-backend
+ :name 'auto
+ :comp-fun 'smex-completing-read-auto
+ :get-text-fun (lambda () (error "This exit function should never be called."))
+ :exit-fun (lambda () (error "This get-text function should never be called.")))
 
 (defun smex-completing-read (choices initial-input)
   (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
