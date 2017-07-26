@@ -153,7 +153,7 @@ Set this to nil to disable fuzzy matching."
 
 (defun smex-prepare-ido-bindings ()
   (setq ido-completion-map
-        (make-composed-keymap '(smex-map ido-completion-map))))
+        (make-composed-keymap (list smex-map ido-completion-map))))
 
 (declare-function ivy-read "ext:ivy")
 (declare-function ivy-done "ext:ivy")
