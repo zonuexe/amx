@@ -4,10 +4,9 @@
 ;;
 ;; Author: Cornelius Mika <cornelius.mika@gmail.com> and contributors
 ;; URL: http://github.com/nonsequitur/smex/
-;; Package-Requires: ((emacs "24") (ido-completing-read+ "3.0"))
+;; Package-Requires: ((emacs "24") (ido-completing-read+ "3.0") (ivy "0"))
 ;; Version: 3.0
 ;; Keywords: convenience, usability
-;; Package-Requires: ((ido-completing-read+ "0"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -29,8 +28,11 @@
 ;;; Code:
 
 (require 'cl-lib)
+;; TODO: lazily load the appropriate backend when needed, perhaps
+;; falling back to `completing-read-default'
 (require 'ido)
 (require 'ido-completing-read+)
+(require 'ivy)
 
 (defgroup smex nil
   "M-x interface with Ido-style fuzzy matching and ranking heuristics."
@@ -169,7 +171,6 @@ Set this to nil to disable fuzzy matching."
             (minibuffer-completion-table choices))
         (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
                               initial-input 'extended-command-history (car choices)))
-    (require 'ivy)
     (ivy-read (smex-prompt-with-prefix-arg) choices
               :keymap smex-map
               :history 'extended-command-history

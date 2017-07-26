@@ -4,3 +4,4 @@
 (package-file "smex.el")
 
 (depends-on "ido-completing-read+")
+(depends-on "ivy")
