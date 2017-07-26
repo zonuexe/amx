@@ -275,11 +275,9 @@ Set this to nil to disable fuzzy matching."
   (add-hook 'kill-emacs-hook 'smex-save-to-file)
   (setq smex-initialized-p t))
 
-(defun smex-initialize-ido ()
-  "Sets up a minimal Ido environment for `ido-completing-read'."
-  (with-no-warnings ; `ido-init-completion-maps' is deprecated in Emacs 25
-    (ido-init-completion-maps))
-  (add-hook 'minibuffer-setup-hook 'ido-minibuffer-setup))
+(define-obsolete-function-alias
+  'smex-initialize-ido 'ido-common-initialization
+  "4.0")
 
 (defsubst smex-save-file-not-empty-p ()
   (string-match-p "\[^[:space:]\]" (buffer-string)))
