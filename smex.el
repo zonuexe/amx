@@ -146,14 +146,15 @@ Set this to nil to disable fuzzy matching."
     (setq commands (mapcar #'symbol-name commands))
     (smex-read-and-run commands)))
 
-(defvar smex-map (let ((map (make-sparse-keymap)))
-                   (define-key map (kbd "TAB") 'minibuffer-complete)
-                   (define-key map (kbd "C-h f") 'smex-describe-function)
-                   (define-key map (kbd "C-h w") 'smex-where-is)
-                   (define-key map (kbd "M-.") 'smex-find-function)
-                   (define-key map (kbd "C-a") 'move-beginning-of-line)
-                   map)
-  "Keymap used in the minibuffer.")
+(defvar smex-map
+  (let ((keymap (make-sparse-keymap)))
+    (define-key keymap (kbd "TAB") 'minibuffer-complete)
+    (define-key keymap (kbd "C-h f") 'smex-describe-function)
+    (define-key keymap (kbd "C-h w") 'smex-where-is)
+    (define-key keymap (kbd "M-.") 'smex-find-function)
+    (define-key keymap (kbd "C-a") 'move-beginning-of-line)
+    keymap)
+  "Additional key bindings for smex completion.")
 
 (defun smex-prepare-ido-bindings ()
   (setq ido-completion-map
@@ -446,19 +447,19 @@ Returns nil when reaching the end of the list."
   (interactive)
   (smex-do-with-selected-item 'find-function))
 
-(defun smex-extract-commands-from-keymap (map)
+(defun smex-extract-commands-from-keymap (keymap)
   (let (commands)
-    (smex-parse-keymap map commands)
+    (smex-parse-keymap keymap commands)
     commands))
 
-(defun smex-parse-keymap (map commands)
+(defun smex-parse-keymap (keymap commands)
   (map-keymap (lambda (_binding element)
                 (if (and (listp element) (eq 'keymap (car element)))
                     (smex-parse-keymap element commands)
                   ;; Strings are commands, too. Reject them.
                   (if (and (symbolp element) (commandp element))
                       (push element commands))))
-              map))
+              keymap))
 
 (defun smex-extract-commands-from-features (mode)
   (let ((library-path (symbol-file mode))
