@@ -92,6 +92,7 @@ Set this to nil to disable fuzzy matching."
 (defvar smex-history)
 (defvar smex-command-count 0)
 (defvar smex-custom-action nil)
+(defvar smex-minibuffer-depth -1)
 
 ;; Check if Smex is supported
 (when (equal (cons 1 1)
@@ -112,10 +113,10 @@ Set this to nil to disable fuzzy matching."
     (and smex-auto-update (smex-update-if-needed))
     (smex-read-and-run smex-ido-cache)))
 
-(defun smex-already-running ()
-  (and (boundp 'ido-choice-list)
-       (eql ido-choice-list smex-ido-cache)
-       (minibuffer-window-active-p (selected-window))))
+(defun smex-active ()
+  "Return non-nil if smex is currently using the minibuffer"
+  (>= smex-minibuffer-depth (minibuffer-depth)))
+(define-obsolete-function-alias 'smex-already-running 'smex-active "4.0")
 
 (defun smex-update-and-rerun ()
   (smex-do-with-selected-item
@@ -162,19 +163,20 @@ Set this to nil to disable fuzzy matching."
 (declare-function ivy-done "ext:ivy")
 
 (defun smex-completing-read (choices initial-input)
-  (if (eq smex-completion-method 'ido)
-      (let ((ido-completion-map ido-completion-map)
-            (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
-            (ido-enable-prefix nil)
-            (ido-enable-flex-matching smex-flex-matching)
-            (ido-max-prospects 10)
-            (minibuffer-completion-table choices))
-        (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
-                              initial-input 'extended-command-history (car choices)))
-    (ivy-read (smex-prompt-with-prefix-arg) choices
-              :keymap smex-map
-              :history 'extended-command-history
-              :preselect (car choices))))
+  (let ((smex-minibuffer-depth (1+ (minibuffer-depth))))
+    (if (eq smex-completion-method 'ido)
+        (let ((ido-completion-map ido-completion-map)
+              (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
+              (ido-enable-prefix nil)
+              (ido-enable-flex-matching smex-flex-matching)
+              (ido-max-prospects 10)
+              (minibuffer-completion-table choices))
+          (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
+                                initial-input 'extended-command-history (car choices)))
+      (ivy-read (smex-prompt-with-prefix-arg) choices
+                :keymap smex-map
+                :history 'extended-command-history
+                :preselect (car choices)))))
 
 (defun smex-prompt-with-prefix-arg ()
   (if (not current-prefix-arg)
