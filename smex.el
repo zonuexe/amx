@@ -132,7 +132,9 @@ Must be set before initializing Smex."
           (setq smex-custom-action nil)
           (funcall action chosen-item))
       (unwind-protect
-          (with-no-warnings ; Don't warn about interactive use of `execute-extended-command'
+          ;; Don't warn about non-interactive use of
+          ;; `execute-extended-command'
+          (with-no-warnings
             (execute-extended-command current-prefix-arg chosen-item-name))
         (smex-rank chosen-item)))))
 
