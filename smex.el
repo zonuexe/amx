@@ -125,7 +125,7 @@ Must be set before initializing Smex."
      (lambda (_) (smex-update) (smex-read-and-run smex-cache new-initial-input)))))
 
 (defun smex-read-and-run (commands &optional initial-input)
-  (let* ((chosen-item-name (smex-completing-read commands initial-input))
+  (let* ((chosen-item-name (smex-completing-read commands :initial-input initial-input))
          (chosen-item (intern chosen-item-name)))
     (if smex-custom-action
         (let ((action smex-custom-action))
@@ -183,6 +183,25 @@ This should work for most completion backends."
   get-text-fun
   exit-fun)
 
+(cl-defun smex-completing-read (choices &key initial-input predicate)
+  (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
+        (comp-fun (smex-backend-comp-fun (smex-get-backend))))
+    (funcall comp-fun choices :initial-input initial-input :predicate predicate)))
+
+(defun smex-prompt-with-prefix-arg ()
+  (if (not current-prefix-arg)
+      smex-prompt-string
+    (concat
+     (if (eq current-prefix-arg '-)
+         "- "
+       (if (integerp current-prefix-arg)
+           (format "%d " current-prefix-arg)
+         (if (= (car current-prefix-arg) 4)
+             "C-u "
+           (format "%d " (car current-prefix-arg)))))
+     smex-prompt-string)))
+
+;; TODO join the other defvars
 (defvar smex-known-backends nil)
 
 (cl-defun smex-define-backend (&key name comp-fun get-text-fun
@@ -210,7 +229,7 @@ This should work for most completion backends."
    ((plist-get smex-known-backends backend))
    (t (error "Unknown smex backed %S" backend))))
 
-(defun smex-completing-read-default (choices initial-input)
+(cl-defun smex-completing-read-default (choices &key initial-input predicate)
   "Smex backend for default Emacs completion"
   (require 'minibuf-eldef)
   (let ((minibuffer-completion-table choices)
@@ -224,7 +243,7 @@ This should work for most completion backends."
               (lambda ()
                 (use-local-map (make-composed-keymap
                                 (list smex-map (current-local-map)))))
-            (completing-read prompt choices nil t initial-input
+            (completing-read prompt choices predicate t initial-input
                              'extended-command-history (symbol-name (caar choices)))))
       (minibuffer-electric-default-mode
        (if prev-eldef-mode 1 0)))))
@@ -240,12 +259,12 @@ May not work for things like ido and ivy."
  :comp-fun 'smex-completing-read-default
  :get-text-fun 'smex-default-get-text)
 
-(defun smex-completing-read-ido (choices initial-input)
+(cl-defun smex-completing-read-ido (choices &key initial-input predicate)
   "Smex backend for ido completion"
   (let ((ido-completion-map ido-completion-map)
         (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
         (minibuffer-completion-table choices))
-    (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
+    (ido-completing-read+ (smex-prompt-with-prefix-arg) choices predicate t
                           initial-input 'extended-command-history (symbol-name (caar choices)))))
 
 (defun smex-ido-get-text ()
@@ -256,13 +275,14 @@ May not work for things like ido and ivy."
  :comp-fun 'smex-completing-read-ido
  :get-text-fun 'smex-ido-get-text)
 
-(defun smex-completing-read-ivy (choices initial-input)
+(cl-defun smex-completing-read-ivy (choices &key initial-input predicate)
   "Smex backend for ivy completion"
   (ivy-read (smex-prompt-with-prefix-arg) choices
-                :keymap smex-map
-                :history 'extended-command-history
-                :initial-input initial-input
-                :preselect (symbol-name (caar choices))))
+            :predicate predicate
+            :keymap smex-map
+            :history 'extended-command-history
+            :initial-input initial-input
+            :preselect (symbol-name (caar choices))))
 
 (defun smex-ivy-get-text ()
   ivy-text)
@@ -272,37 +292,19 @@ May not work for things like ido and ivy."
  :comp-fun 'smex-completing-read-ivy
  :get-text-fun 'smex-ivy-get-text)
 
-(defun smex-completing-read-auto (choices initial-input)
+(cl-defun smex-completing-read-auto (choices &key initial-input predicate)
   "Automatically select between ivy, ido, and standard completion."
   (let ((smex-backend
          (cond
           (ivy-mode 'ivy)
           (ido-mode 'ido)
           (t 'standard))))
-    (smex-completing-read choices initial-input)))
+    (smex-completing-read choices :initial-input initial-input :predicate predicate)))
 (smex-define-backend
  :name 'auto
  :comp-fun 'smex-completing-read-auto
  :get-text-fun (lambda () (error "This exit function should never be called."))
  :exit-fun (lambda () (error "This get-text function should never be called.")))
-
-(defun smex-completing-read (choices initial-input)
-  (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
-        (comp-fun (smex-backend-comp-fun (smex-get-backend))))
-    (funcall comp-fun choices initial-input)))
-
-(defun smex-prompt-with-prefix-arg ()
-  (if (not current-prefix-arg)
-      smex-prompt-string
-    (concat
-     (if (eq current-prefix-arg '-)
-         "- "
-       (if (integerp current-prefix-arg)
-           (format "%d " current-prefix-arg)
-         (if (= (car current-prefix-arg) 4)
-             "C-u "
-           (format "%d " (car current-prefix-arg)))))
-     smex-prompt-string)))
 
 ;;--------------------------------------------------------------------------------
 ;; Cache and Maintenance
