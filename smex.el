@@ -53,11 +53,21 @@
     (when (eq (global-key-binding [remap execute-extended-command]) 'smex)
       (global-unset-key [remap execute-extended-command]))))
 
-(defcustom smex-completion-method 'ido
-  "Method to select a candidate from a list of strings."
+(defcustom smex-backend 'auto
+  "Completion function to select a candidate from a list of strings.
+
+This function should take the same arguments as
+`smex-completing-read': CHOICES and INITIAL-INPUT.
+
+By default, an appropriate method is selected based on whether
+`ivy-mode' or `ido-mode' is enabled."
   :type '(choice
+          (const :tag "Auto-select" auto)
           (const :tag "Ido" ido)
-          (const :tag "Ivy" ivy)))
+          (const :tag "Ivy" ivy)
+          (const :tag "Standard" standard)
+          (symbol :tag "Custom backend")))
+(define-obsolete-variable-alias 'smex-completion-method 'smex-backend "4.0")
 
 (defcustom smex-auto-update t
   "If non-nil, `Smex' checks for new commands each time it is run.
@@ -148,36 +158,99 @@ Set this to nil to disable fuzzy matching."
 
 (defvar smex-map
   (let ((keymap (make-sparse-keymap)))
-    (define-key keymap (kbd "TAB") 'minibuffer-complete)
     (define-key keymap (kbd "C-h f") 'smex-describe-function)
     (define-key keymap (kbd "C-h w") 'smex-where-is)
     (define-key keymap (kbd "M-.") 'smex-find-function)
-    (define-key keymap (kbd "C-a") 'move-beginning-of-line)
     keymap)
   "Additional key bindings for smex completion.")
 
+(defvar smex-ido-map
+  (let ((keymap (make-sparse-keymap)))
+    (define-key keymap (kbd "C-a") 'move-beginning-of-line)
+    (set-keymap-parent keymap smex-map)
+    keymap))
+
 (defun smex-prepare-ido-bindings ()
   (setq ido-completion-map
-        (make-composed-keymap (list smex-map ido-completion-map))))
+        (make-composed-keymap (list smex-ido-map ido-completion-map))))
 
 (declare-function ivy-read "ext:ivy")
 (declare-function ivy-done "ext:ivy")
 
-(defun smex-completing-read (choices initial-input)
-  (let ((smex-minibuffer-depth (1+ (minibuffer-depth))))
-    (if (eq smex-completion-method 'ido)
-        (let ((ido-completion-map ido-completion-map)
-              (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
-              (ido-enable-prefix nil)
-              (ido-enable-flex-matching smex-flex-matching)
-              (ido-max-prospects 10)
-              (minibuffer-completion-table choices))
-          (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
-                                initial-input 'extended-command-history (car choices)))
-      (ivy-read (smex-prompt-with-prefix-arg) choices
+(cl-defstruct smex-backend
+  name
+  compfun
+  exitfun)
+
+(defvar smex-known-backends nil)
+
+(cl-defun smex-define-backend (name compfun &optional (exitfun 'exit-minibuffer))
+  (declare (indent 1))
+  (let ((backend
+         (make-smex-backend :name name
+                            :compfun compfun
+                            :exitfun exitfun)))
+    (setq smex-known-backends
+          (plist-put smex-known-backends name backend))))
+
+(defun smex-get-backend (backend)
+  (cond
+   ((smex-backend-p backend)
+    backend)
+   ((plist-get smex-known-backends backend))
+   (t (error "Unknown smex backed %S" backend))))
+
+(defun smex-completing-read-default (choices initial-input)
+  "Smex backend for default Emacs completion"
+  (let ((minibuffer-completion-table choices))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (use-local-map (make-composed-keymap (list smex-map (current-local-map)))))
+      (completing-read (smex-prompt-with-prefix-arg) choices nil t
+                       initial-input 'extended-command-history (car choices)))))
+(smex-define-backend 'standard
+  'smex-completing-read-default
+  'exit-minibuffer)
+
+(defun smex-completing-read-ido (choices initial-input)
+  "Smex backend for ido completion"
+  (let ((ido-completion-map ido-completion-map)
+        (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
+        (ido-enable-prefix nil)
+        (ido-enable-flex-matching smex-flex-matching)
+        (ido-max-prospects 10)
+        (minibuffer-completion-table choices))
+    (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
+                          initial-input 'extended-command-history (car choices))))
+(smex-define-backend 'ido
+  'smex-completing-read-ido
+  'ido-exit-minibuffer)
+
+(defun smex-completing-read-ivy (choices initial-input)
+  "Smex backend for ivy completion"
+  (ivy-read (smex-prompt-with-prefix-arg) choices
                 :keymap smex-map
                 :history 'extended-command-history
-                :preselect (car choices)))))
+                :preselect (car choices)))
+(smex-define-backend 'ivy
+  'smex-completing-read-ivy
+  'ivy-done)
+
+(defun smex-completing-read-auto (choices initial-input)
+  (let ((smex-backend
+         (cond
+          (ivy-mode 'ivy)
+          (ido-mode 'ido)
+          (t 'standard))))
+    (smex-completing-read choices initial-input)))
+(smex-define-backend 'auto
+  'smex-completing-read-auto
+  (lambda () (error "This function should never be called.")))
+
+(defun smex-completing-read (choices initial-input)
+  (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
+        (compfun (smex-backend-compfun (smex-get-backend smex-backend))))
+    (funcall compfun choices initial-input)))
 
 (defun smex-prompt-with-prefix-arg ()
   (if (not current-prefix-arg)
@@ -268,8 +341,7 @@ Set this to nil to disable fuzzy matching."
 ;;;###autoload
 (defun smex-initialize ()
   (interactive)
-  (when (eq smex-completion-method 'ido)
-    (unless ido-mode (smex-initialize-ido)))
+  (ido-common-initialization)
   (smex-load-save-file)
   (smex-detect-new-commands)
   (smex-rebuild-cache)
@@ -427,11 +499,13 @@ Returns nil when reaching the end of the list."
 ;;--------------------------------------------------------------------------------
 ;; Help and Reference
 
+(defun smex-exit-minibuffer ()
+  (interactive)
+  (funcall (smex-backend-exitfun (smex-get-backend smex-backend))))
+
 (defun smex-do-with-selected-item (fn)
   (setq smex-custom-action fn)
-  (if (eq smex-completion-method 'ido)
-      (ido-exit-minibuffer)
-    (ivy-done)))
+  (smex-exit-minibuffer))
 
 (defun smex-describe-function ()
   (interactive)
