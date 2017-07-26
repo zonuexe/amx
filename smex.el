@@ -94,7 +94,6 @@ Must be set before initializing Smex."
 
 (defvar smex-initialized-p nil)
 (defvar smex-cache)
-(defvar smex-ido-cache)
 (defvar smex-data)
 (defvar smex-history)
 (defvar smex-command-count 0)
@@ -118,7 +117,7 @@ Must be set before initializing Smex."
   (if (smex-active)
       (smex-update-and-rerun)
     (and smex-auto-update (smex-update-if-needed))
-    (smex-read-and-run smex-ido-cache)))
+    (smex-read-and-run smex-cache)))
 
 (defun smex-active ()
   "Return non-nil if smex is currently using the minibuffer"
@@ -129,7 +128,7 @@ Must be set before initializing Smex."
   (let ((new-initial-input
          (funcall (smex-backend-get-text-fun (smex-get-backend)))))
     (smex-do-with-selected-item
-     (lambda (_) (smex-update) (smex-read-and-run smex-ido-cache new-initial-input)))))
+     (lambda (_) (smex-update) (smex-read-and-run smex-cache new-initial-input)))))
 
 (defun smex-read-and-run (commands &optional initial-input)
   (let* ((chosen-item-name (smex-completing-read commands initial-input))
@@ -220,7 +219,7 @@ This should work for most completion backends."
   (require 'minibuf-eldef)
   (let ((minibuffer-completion-table choices)
         (prompt (concat (smex-prompt-with-prefix-arg)
-                        (format " [%s]: " (car choices))))
+                        (format " [%s]: " (caar choices))))
         (prev-eldef-mode minibuffer-electric-default-mode))
     (unwind-protect
         (progn
@@ -230,7 +229,7 @@ This should work for most completion backends."
                 (use-local-map (make-composed-keymap
                                 (list smex-map (current-local-map)))))
             (completing-read prompt choices nil t initial-input
-                             'extended-command-history (car choices))))
+                             'extended-command-history (symbol-name (caar choices)))))
       (minibuffer-electric-default-mode
        (if prev-eldef-mode 1 0)))))
 
@@ -251,7 +250,7 @@ May not work for things like ido and ivy."
         (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
         (minibuffer-completion-table choices))
     (ido-completing-read+ (smex-prompt-with-prefix-arg) choices nil t
-                          initial-input 'extended-command-history (car choices))))
+                          initial-input 'extended-command-history (symbol-name (caar choices)))))
 
 (defun smex-ido-get-text ()
   ido-text)
@@ -267,7 +266,7 @@ May not work for things like ido and ivy."
                 :keymap smex-map
                 :history 'extended-command-history
                 :initial-input initial-input
-                :preselect (car choices)))
+                :preselect (symbol-name (caar choices))))
 
 (defun smex-ivy-get-text ()
   ivy-text)
@@ -330,8 +329,7 @@ May not work for things like ido and ivy."
       (setcdr (last smex-cache) new-commands)))
 
   (setq smex-cache (sort smex-cache 'smex-sorting-rules))
-  (smex-restore-history)
-  (setq smex-ido-cache (smex-convert-for-ido smex-cache)))
+  (smex-restore-history))
 
 (defun smex-convert-for-ido (command-items)
   (mapcar (lambda (command-item) (symbol-name (car command-item))) command-items))
@@ -472,11 +470,6 @@ May not work for things like ido and ivy."
           (setcdr command-cell smex-cache)
           (setq smex-cache command-cell)
 
-          ;; Repeat the same for the ido cache. Should this be DRYed?
-          (setq command-cell (smex-remove-nth-cell pos smex-ido-cache))
-          (setcdr command-cell smex-ido-cache)
-          (setq smex-ido-cache command-cell)
-
           ;; Now put the last history item back to its normal place.
           (smex-sort-item-at smex-history-length))))))
 
@@ -506,11 +499,7 @@ May not work for things like ido and ivy."
         (setq command-cell (smex-remove-nth-cell n smex-cache))
         ;; smex-cache just got shorter by one element, so subtract '1' from insert-at.
         (setq insert-at (+ n (- insert-at 1)))
-        (smex-insert-cell command-cell insert-at smex-cache)
-
-        ;; Repeat the same for the ido cache. DRY?
-        (setq command-cell (smex-remove-nth-cell n smex-ido-cache))
-        (smex-insert-cell command-cell insert-at smex-ido-cache)))))
+        (smex-insert-cell command-cell insert-at smex-cache)))))
 
 (defun smex-detect-position (cell function)
   "Detects, relatively to CELL, the position of the cell
