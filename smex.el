@@ -176,21 +176,30 @@ Must be set before initializing Smex."
 (declare-function ivy-read "ext:ivy")
 (declare-function ivy-done "ext:ivy")
 
+(defun smex-default-exit-minibuffer ()
+  "Run the key binding for RET.
+
+This should work for most completion backends."
+  (execute-kbd-macro (kbd "RET")))
+
 (cl-defstruct smex-backend
   name
   comp-fun
-  exit-fun
-  get-text-fun)
+  get-text-fun
+  exit-fun)
 
 (defvar smex-known-backends nil)
 
-(cl-defun smex-define-backend (name comp-fun exit-fun get-text-fun)
-  (declare (indent 1))
+(cl-defun smex-define-backend (name comp-fun get-text-fun &optional
+                                    (exit-fun 'smex-default-exit-minibuffer))
+  (declare (indent 1)
+           (advertised-calling-convention
+            (name comp-fun get-text-fun &optional exit-fun) nil))
   (let ((backend
          (make-smex-backend :name name
                             :comp-fun comp-fun
-                            :exit-fun exit-fun
-                            :get-text-fun get-text-fun)))
+                            :get-text-fun get-text-fun
+                            :exit-fun exit-fun)))
     (setq smex-known-backends
           (plist-put smex-known-backends name backend))))
 
@@ -218,7 +227,6 @@ May not work for things like ido and ivy."
 
 (smex-define-backend 'standard
   'smex-completing-read-default
-  'exit-minibuffer
   'smex-default-get-text)
 
 (defun smex-completing-read-ido (choices initial-input)
@@ -234,7 +242,6 @@ May not work for things like ido and ivy."
 
 (smex-define-backend 'ido
   'smex-completing-read-ido
-  'ido-exit-minibuffer
   'smex-ido-get-text)
 
 (defun smex-completing-read-ivy (choices initial-input)
@@ -250,7 +257,6 @@ May not work for things like ido and ivy."
 
 (smex-define-backend 'ivy
   'smex-completing-read-ivy
-  'ivy-done
   'smex-ivy-get-text)
 
 (defun smex-completing-read-auto (choices initial-input)
@@ -517,10 +523,12 @@ Returns nil when reaching the end of the list."
 ;; Help and Reference
 
 (defun smex-exit-minibuffer ()
+  "Call the backend-specific minibuffer exit function."
   (interactive)
   (funcall (smex-backend-exit-fun (smex-get-backend))))
 
 (defun smex-do-with-selected-item (fn)
+  "Exit minibuffer and call FN on the selected item."
   (setq smex-custom-action fn)
   (smex-exit-minibuffer))
 
