@@ -125,7 +125,15 @@ Must be set before initializing Smex."
      (lambda (_) (smex-update) (smex-read-and-run smex-cache new-initial-input)))))
 
 (defun smex-read-and-run (commands &optional initial-input)
-  (let* ((chosen-item-name (smex-completing-read commands :initial-input initial-input))
+  (let* ((collection
+          ;; Initially complete with only non-ignored commands, but if
+          ;; all of those are tuled out, allow completing with ignored
+          ;; commands.
+          (apply-partially #'completion-table-with-predicate
+                           commands
+                           (lambda (cmd) (not (smex-command-ignored-p cmd)))
+                           nil))
+         (chosen-item-name (smex-completing-read commands :initial-input initial-input))
          (chosen-item (intern chosen-item-name)))
     (if smex-custom-action
         (let ((action smex-custom-action))
@@ -147,7 +155,11 @@ Must be set before initializing Smex."
   (let ((commands (delete-dups (append (smex-extract-commands-from-keymap (current-local-map))
                                        (smex-extract-commands-from-features major-mode)))))
     (setq commands (smex-sort-according-to-cache commands))
-    (setq commands (mapcar #'symbol-name commands))
+    (setq commands
+          (apply-partially #'completion-table-with-predicate
+                           commands
+                           (lambda (cmd) (not (smex-command-ignored-p cmd)))
+                           nil))
     (smex-read-and-run commands)))
 
 (defvar smex-map
@@ -177,6 +189,30 @@ Must be set before initializing Smex."
 This should work for most completion backends."
   (execute-kbd-macro (kbd "RET")))
 
+;; TODO find a home
+(defun smex-get-command-name (cmd)
+  "Return CMD as a string.
+
+CMD can be a string, symbol, or cons cell whose `car' is a string
+or symbol."
+  (cond
+   ((symbolp cmd)
+    (symbol-name cmd))
+   ((consp cmd)
+    (smex-get-command-name (car cmd)))
+   ((stringp cmd)
+    cmd)
+   (t
+    (error "Unrecognized command: %s" cmd))))
+
+;; TODO find a home
+(defun smex-get-default (choices)
+  (smex-get-command-name
+   (car
+    (if (listp choices)
+        choices
+      (all-completions "" choices)))))
+
 (cl-defstruct smex-backend
   name
   comp-fun
@@ -186,7 +222,9 @@ This should work for most completion backends."
 (cl-defun smex-completing-read (choices &key initial-input predicate)
   (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
         (comp-fun (smex-backend-comp-fun (smex-get-backend))))
-    (funcall comp-fun choices :initial-input initial-input :predicate predicate)))
+    (funcall comp-fun choices :initial-input initial-input
+             ;; Work around a bug
+             :predicate (or predicate #'identity))))
 
 ;; TODO rehome
 (defvar smex-temp-prompt-string nil
@@ -244,7 +282,7 @@ to nil.")
   (require 'minibuf-eldef)
   (let ((minibuffer-completion-table choices)
         (prompt (concat (smex-prompt-with-prefix-arg)
-                        (format " [%s]: " (caar choices))))
+                        (format " [%s]: " (smex-get-default choices))))
         (prev-eldef-mode minibuffer-electric-default-mode))
     (unwind-protect
         (progn
@@ -254,7 +292,8 @@ to nil.")
                 (use-local-map (make-composed-keymap
                                 (list smex-map (current-local-map)))))
             (completing-read prompt choices predicate t initial-input
-                             'extended-command-history (symbol-name (caar choices)))))
+                             'extended-command-history
+                             (smex-get-default choices))))
       (minibuffer-electric-default-mode
        (if prev-eldef-mode 1 0)))))
 
@@ -275,7 +314,8 @@ May not work for things like ido and ivy."
         (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
         (minibuffer-completion-table choices))
     (ido-completing-read+ (smex-prompt-with-prefix-arg) choices predicate t
-                          initial-input 'extended-command-history (symbol-name (caar choices)))))
+                          initial-input 'extended-command-history
+                          (smex-get-default choices))))
 
 (defun smex-ido-get-text ()
   ido-text)
@@ -292,7 +332,7 @@ May not work for things like ido and ivy."
             :keymap smex-map
             :history 'extended-command-history
             :initial-input initial-input
-            :preselect (symbol-name (caar choices))))
+            :preselect (smex-get-default choices)))
 
 (defun smex-ivy-get-text ()
   ivy-text)
@@ -535,6 +575,104 @@ Returns nil when reaching the end of the list."
   (let* ((cell (nthcdr (- n 1) list))
          (next-cell (cdr cell)))
     (setcdr (setcdr cell new-cell) next-cell)))
+
+;;--------------------------------------------------------------------------------
+;; Ignored commands
+
+;; NOTE: Use completion-table-with-predicate with string = nil to get auto-fallback
+
+(defvar smex-ignored-command-matchers
+  '("\\`ad-Orig-"
+    "\\`menu-bar"
+    smex-command-marked-ignored-p
+    smex-command-obsolete-p
+    smex-command-mouse-interactive-p)
+  "List of regexps and/or functions.
+
+Commands that match one of these regexps and commands for which
+one of these functions returns non-nil will be hidden from the
+smex completion list.")
+
+(defun smex-command-ignored-p (command)
+  "Return non-nil if COMMAND is ignored by smex completion.
+
+See `smex-ignored-command-matchers'."
+  ;; Allow passing entries from `smex-cache', whose `car' is the
+  ;; command symbol.
+  (when (consp command)
+    (setq command (car command)))
+  (cl-loop
+   with matched = nil
+   for matcher in smex-ignored-command-matchers
+   ;; regexp
+   if (stringp matcher)
+   do (setq matched (string-match-p matcher (symbol-name command)))
+   ;; function
+   else
+   do (setq matched (funcall matcher command))
+   if matched return matched
+   finally return matched))
+
+(defun smex-command-marked-ignored-p (command)
+  "Return non-nil if COMMAND's `smex-ignored' property is non-nil.
+
+See `smex-ignore-command'."
+  ;; Allow passing entries from `smex-cache', whose `car' is the
+  ;; command symbol.
+  (when (consp command)
+    (setq command (car command)))
+  (get command 'smex-ignored))
+
+(defun smex-command-obsolete-p (command)
+  "Return non-nil if COMMAND is marked obsolete."
+  (get command 'byte-obsolete-info))
+
+(defun smex-command-mouse-interactive-p (command)
+  "Return non-nil if COMMAND uses mouse events.
+
+This is not guaranteed to detect all mouse-interacting commands,
+but it should find most of them."
+  (and (listp (help-function-arglist command))
+       (not (eq ?\& (aref (symbol-name (car (help-function-arglist command))) 0)))
+       (stringp (cadr (interactive-form command)))
+       (string-match-p "\\`[*@^]*e" (cadr (interactive-form command)))))
+
+(cl-defun smex-ignore-command (command &optional (do-ignore t))
+  "Tell smex to ignore COMMAND.
+
+Ignored commands are still usable, but are hidden from completion
+in smex.
+
+COMMAND can also be a list of commands to ignore.
+
+A hidden second arg defaults to t, but if nil is explicitly
+passed for this arg, it tells smex *not* to ignore COMMAND,
+reversing the effect of a previous `smex-ignore'. "
+  (interactive
+   (list
+    (let ((smex-temp-prompt-string "Ignore command: "))
+      (smex-completing-read
+       smex-cache
+       :predicate (lambda (cmd) (not (smex-command-ignored-p cmd))))))
+   (declare (advertised-calling-convention (command) nil)))
+  (unless (listp command)
+    (setq command (list command)))
+  (cl-loop
+   for cmd in command
+   if (stringp cmd)
+   do (setq cmd (intern cmd))
+   do (put cmd 'smex-ignored do-ignore)))
+
+(defun smex-unignore-command (command)
+  "Undo a previous `smex-ignore' on COMMAND."
+  (interactive
+   (list
+    (let ((smex-temp-prompt-string "Un-ignore command: "))
+      (smex-completing-read
+       smex-cache
+       :predicate #'smex-command-marked-ignored-p))))
+  (smex-ignore-command command nil))
+
 
 ;;--------------------------------------------------------------------------------
 ;; Help and Reference
