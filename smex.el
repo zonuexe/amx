@@ -399,12 +399,11 @@ May not work for things like ido and ivy."
 
 (defun smex-save-history ()
   "Updates `smex-history'"
-  (setq smex-history nil)
-  (let ((cell smex-cache))
-    (dotimes (_ smex-history-length)
-      (setq smex-history (cons (caar cell) smex-history))
-      (setq cell (cdr cell))))
-  (setq smex-history (nreverse smex-history)))
+  (setq smex-history
+        (cl-loop
+         for i from 1 upto smex-history-length
+         for (command-name . count) in smex-cache
+         collect command-name)))
 
 (defmacro smex-pp (list-var)
   `(smex-pp* ,list-var ,(symbol-name list-var)))
