@@ -28,6 +28,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'ido)
 (require 'ido-completing-read+)
 
@@ -509,8 +510,8 @@ sorted by frequency of use."
                     (smex-update-if-needed)))))
            ;; Defining advice on `eval' causes infinite recursion, so
            ;; don't allow that.
-           (delete-if (apply-partially 'equal 'eval)
-                      functions))))
+           (cl-delete-if (apply-partially 'equal 'eval)
+                         functions))))
 
 ;; If you call `smex-update' after every invocation of just these few
 ;; functions, you almost never need any other updates.
