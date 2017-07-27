@@ -114,8 +114,9 @@ completion list."
 
 (define-obsolete-variable-alias 'smex-flex-matching 'ido-enable-flex-matching "4.0")
 
-(defvar smex-initialized-p nil
+(defvar smex-initialized nil
   "If non-nil smex is initialized.")
+(define-obsolete-variable-alias 'smex-initialized-p 'smex-initialized "4.0")
 
 (defvar smex-cache)
 (defvar smex-data)
@@ -192,7 +193,7 @@ or symbol."
 ;;;###autoload
 (defun smex ()
   (interactive)
-  (unless smex-initialized-p
+  (unless smex-initialized
     (smex-initialize))
   (if (smex-active)
       (smex-update-and-rerun)
@@ -246,7 +247,7 @@ or symbol."
 (defun smex-major-mode-commands ()
   "Like `smex', but limited to commands that are relevant to the active major mode."
   (interactive)
-  (unless smex-initialized-p
+  (unless smex-initialized
     (smex-initialize))
   (let ((commands (delete-dups (append (smex-extract-commands-from-keymap (current-local-map))
                                        (smex-extract-commands-from-features major-mode)))))
@@ -495,7 +496,7 @@ May not work for things like ido and ivy."
   (smex-detect-new-commands)
   (smex-rebuild-cache)
   (add-hook 'kill-emacs-hook 'smex-save-to-file)
-  (setq smex-initialized-p t))
+  (setq smex-initialized t))
 
 (define-obsolete-function-alias
   'smex-initialize-ido 'ido-common-initialization
@@ -964,7 +965,7 @@ sorted by frequency of use."
              `(defadvice ,fun (after smex-update activate)
                 "Run smex-update upon completion"
                 (ignore-errors
-                  (when (and smex-initialized-p smex-auto-update)
+                  (when (and smex-initialized smex-auto-update)
                     (smex-update-if-needed)))))
            ;; Defining advice on `eval' causes infinite recursion, so
            ;; don't allow that.
