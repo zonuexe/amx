@@ -30,6 +30,58 @@
 (require 'cl-lib)
 (require 'ido)
 
+(defvar smex-initialized nil
+  "If non-nil smex is initialized.")
+(define-obsolete-variable-alias 'smex-initialized-p 'smex-initialized "4.0")
+
+(defvar smex-cache)
+(defvar smex-data)
+(defvar smex-history)
+
+(defvar smex-command-count 0
+  "Number of commands known to smex.")
+
+(defvar smex-custom-action nil
+  "If non-nil, smex will call this in place of `execute-extended-command'.")
+
+(defvar smex-minibuffer-depth -1
+  "Used to determin if smex \"owns\" the current active minibuffer.")
+
+(defvar smex-command-keybind-hash nil
+  "Hash table for translating between commands and key bindings.
+
+See `smex-make-keybind-hash'.")
+
+(defvar smex-last-active-maps nil
+  "List of keymaps last used to update `smex-command-keybind-hash'.
+
+When `smex-command-keybind-hash' is updated, this is set to the
+value of `(current-active-maps)' at that time. This is used to
+figure out whether to invalidate the hash table for the next call
+to smex.")
+
+(defvar smex-known-backends nil
+  "Plist of known smex completion backends.")
+
+(defvar smex-temp-prompt-string nil
+  "if non-nil, overrides `smex-prompt-string' once.
+
+Each time `smex-prompt-with-prefix-arg' is called, this is reset
+to nil.")
+
+;; This timer will run every time Emacs is idle for 1 second, but most
+;; of the time it will do nothing.
+(defvar smex-short-idle-update-timer nil)
+;; This timer forces a periodic updates to happen if you walk away for
+;; a few hours, so that smex won't wait until you come back to do a
+;; periodic update
+(defvar smex-long-idle-update-timer nil)
+
+(defvar smex-last-update-time nil
+  "Time when `smex-update' was last run.
+
+If nil, a `smex-update' is needed ASAP.")
+
 (cl-defstruct smex-backend
   name
   required-feature
@@ -57,6 +109,25 @@
     (when (eq (global-key-binding [remap execute-extended-command]) 'smex)
       (global-unset-key [remap execute-extended-command]))))
 
+(defun smex-set-auto-update-interval (symbol value)
+  "Custom setter for `smex-auto-update-interval'.
+
+Arguments are the same as in `set-default'.
+
+In addition to setting the variable, this will also set up an
+idle timer to ensure that updates happen when idle."
+  (cl-assert (eq symbol 'smex-auto-update-interval))
+  (set-default symbol value)
+  ;; Cancel any previous timer
+  (when smex-long-idle-update-timer
+    (cancel-timer smex-long-idle-update-timer)
+    (setq smex-long-idle-update-timer nil))
+  (when value
+    ;; Enable idle updating
+    (setq smex-long-idle-update-timer
+          (run-with-idle-timer (1+ (* 60 value)) t
+                               'smex-idle-update))))
+
 (defcustom smex-auto-update-interval nil
   "Time in minutes between periodic updates of the command list.
 
@@ -67,7 +138,8 @@ commands, but just in case any slip through, you can enable
 periodic updates to catch them. If this variable is nil, no
 periodic updates will be performed."
   :type '(choice (const :tag "Disabled" nil)
-                 (number :tag "Minutes")))
+                 (number :tag "Minutes"))
+  :set #'smex-set-auto-update-interval)
 
 (make-obsolete-variable 'smex-auto-update "Set `smex-auto-update-interval' instead." "4.0")
 
@@ -113,52 +185,6 @@ completion list."
            (function :tag "Function"))))
 
 (define-obsolete-variable-alias 'smex-flex-matching 'ido-enable-flex-matching "4.0")
-
-(defvar smex-initialized nil
-  "If non-nil smex is initialized.")
-(define-obsolete-variable-alias 'smex-initialized-p 'smex-initialized "4.0")
-
-(defvar smex-cache)
-(defvar smex-data)
-(defvar smex-history)
-
-(defvar smex-command-count 0
-  "Number of commands known to smex.")
-
-(defvar smex-custom-action nil
-  "If non-nil, smex will call this in place of `execute-extended-command'.")
-
-(defvar smex-minibuffer-depth -1
-  "Used to determin if smex \"owns\" the current active minibuffer.")
-
-(defvar smex-command-keybind-hash nil
-  "Hash table for translating between commands and key bindings.
-
-See `smex-make-keybind-hash'.")
-
-(defvar smex-last-active-maps nil
-  "List of keymaps last used to update `smex-command-keybind-hash'.
-
-When `smex-command-keybind-hash' is updated, this is set to the
-value of `(current-active-maps)' at that time. This is used to
-figure out whether to invalidate the hash table for the next call
-to smex.")
-
-(defvar smex-known-backends nil
-  "Plist of known smex completion backends.")
-
-(defvar smex-temp-prompt-string nil
-  "if non-nil, overrides `smex-prompt-string' once.
-
-Each time `smex-prompt-with-prefix-arg' is called, this is reset
-to nil.")
-
-(defvar smex-idle-update-timer nil)
-
-(defvar smex-last-update-time nil
-  "Time when `smex-update' was last run.
-
-If nil, a `smex-update' is needed ASAP.")
 
 ;;--------------------------------------------------------------------------------
 ;; Smex Internals
@@ -1033,24 +1059,6 @@ sorted by frequency of use."
 ;;--------------------------------------------------------------------------------
 ;; Auto Update
 
-;; This timer will run every time Emacs is idle for 1 second, but most
-;; of the time it will do nothing.
-(setq smex-idle-update-timer
-      (run-with-idle-timer
-       1 t
-       (lambda ()
-         (unless smex-initialized
-           (smex-initialize))
-         (let ((do-recount
-                ;; If periodic updates are enabled, force a thorough
-                ;; check for new commands after the auto-update
-                ;; interval has elapsed.
-                (and smex-auto-update-interval
-                     smex-last-update-time
-                     (> (float-time (time-since smex-last-update-time))
-                        (* 60 smex-auto-update-interval)))))
-           (smex-update-if-needed do-recount)))))
-
 (defun smex-post-eval-force-update (&rest args)
   ;; Setting this will force an update the next time Emacs is idle
   (setq smex-last-update-time nil))
@@ -1060,6 +1068,23 @@ sorted by frequency of use."
 ;; called should catch all new command definitions.
 (cl-loop for fun in '(load eval-last-sexp eval-buffer eval-region eval-expression)
          do (advice-add fun :after #'smex-post-eval-force-update))
+
+(defun smex-idle-update ()
+  (unless smex-initialized
+           (smex-initialize))
+         (let ((do-recount
+                ;; If periodic updates are enabled, force a thorough
+                ;; check for new commands after the auto-update
+                ;; interval has elapsed.
+                (and smex-auto-update-interval
+                     smex-last-update-time
+                     (> (float-time (time-since smex-last-update-time))
+                        (* 60 smex-auto-update-interval)))))
+           (smex-update-if-needed do-recount)))
+
+;; This does a quick update check every time emacs is idle
+(setq smex-short-idle-update-timer
+      (run-with-idle-timer 1 t 'smex-idle-update))
 
 (provide 'smex)
 ;;; smex.el ends here
