@@ -191,12 +191,13 @@ or symbol."
 
 (defun smex-get-default (choices)
   "Get the first entry from CHOICES as a string."
-  (smex-clean-command-name
+  (smex-augment-command-with-keybind
    (smex-get-command-name
     (car
      (if (listp choices)
          choices
-       (all-completions "" choices))))))
+       (all-completions "" choices))))
+   (when smex-show-key-bindings (smex-update-keybind-hash))))
 
 ;;--------------------------------------------------------------------------------
 ;; Smex Interface
@@ -781,6 +782,14 @@ current set of active keymaps.e"
             (lambda (olddef newdef keymap &rest args)
               (smex-handle-modified-keymap keymap)))
 
+(defsubst smex-augment-command-with-keybind (command &optional bind-hash)
+  (let* ((cmdname (smex-get-command-name command))
+         (cmdsym (intern cmdname))
+         (keybind (and bind-hash (gethash cmdsym bind-hash))))
+    (if (and keybind (not (smex-command-ignored-p cmdsym)))
+        (format "%s (%s)" cmdname keybind)
+      cmdname)))
+
 (defun smex-augment-commands-with-keybinds
     (commands &optional bind-hash)
   "Append key bindings from BIND-HASH to COMMANDS.
@@ -799,13 +808,7 @@ In the returned list, each element will be a string."
    ;; necessary.
    with bind-hash = (or bind-hash (smex-update-keybind-hash))
    for cmd in commands
-   for cmdname = (smex-get-command-name cmd)
-   for cmdsym = (intern cmdname)
-   for keybind = (gethash cmdsym bind-hash)
-   if (and keybind (not (smex-command-ignored-p cmdsym)))
-   collect (format "%s (%s)" cmdname keybind)
-   else
-   collect cmdname))
+   collect (smex-augment-command-with-keybind cmd bind-hash)))
 
 (defun smex-clean-command-name (command-name)
   "Inverse of `smex-augment-commands-with-keybinds', approximately.
