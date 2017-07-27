@@ -76,7 +76,8 @@ periodic updates will be performed."
 Variables stored are: `smex-data', `smex-history'.
 Must be set before initializing Smex."
   ;; TODO allow this to be set any time
-  :type 'string)
+  :type '(choice (string :tag "File name")
+                 (const :tag "Don't save" nil)))
 
 (defcustom smex-history-length 7
   "Determines on how many recently executed commands
@@ -560,8 +561,10 @@ has changed."
 
 (defun smex-load-save-file ()
   "Loads `smex-history' and `smex-data' from `smex-save-file'"
-  (let ((save-file (expand-file-name smex-save-file)))
-    (if (file-readable-p save-file)
+  (setq smex-history nil smex-data nil)
+  (when smex-save-file
+    (let ((save-file (expand-file-name smex-save-file)))
+      (when (file-readable-p save-file)
         (with-temp-buffer
           (insert-file-contents save-file)
           (condition-case nil
@@ -571,8 +574,7 @@ has changed."
                        (error "Invalid data in smex-save-file (%s). Can't restore history."
                               smex-save-file)
                      (unless (boundp 'smex-history) (setq smex-history nil))
-                     (unless (boundp 'smex-data)    (setq smex-data nil))))))
-      (setq smex-history nil smex-data nil))))
+                     (unless (boundp 'smex-data)    (setq smex-data nil))))))))))
 
 (defun smex-save-history ()
   "Updates `smex-history'"
@@ -603,7 +605,7 @@ has changed."
 
 (defun smex-save-to-file ()
   (interactive)
-  (when init-file-user
+  (when (and init-file-user smex-save-file)
     (smex-save-history)
     (with-temp-file (expand-file-name smex-save-file)
       (smex-pp smex-history)
