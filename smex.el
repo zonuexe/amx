@@ -94,6 +94,24 @@ Must be set before initializing Smex."
   "String to display in the Smex prompt."
   :type 'string)
 
+(defcustom smex-ignored-command-matchers
+  '("\\`self-insert-command\\'"
+    "\\`ad-Orig-"
+    "\\`menu-bar"
+    smex-command-marked-ignored-p
+    smex-command-obsolete-p
+    smex-command-mouse-interactive-p)
+  "List of regexps and/or functions.
+
+Each element is either a regular expression or a function of one
+argument. Commands that match any of the regexps or return
+non-nil for any of these functions will be hidden from the smex
+completion list."
+  :type '(repeat
+          (choice
+           (regexp :tag "Regular expression")
+           (function :tag "Function"))))
+
 (define-obsolete-variable-alias 'smex-flex-matching 'ido-enable-flex-matching "4.0")
 
 (defvar smex-initialized-p nil
@@ -124,6 +142,49 @@ When `smex-command-keybind-hash' is updated, this is set to the
 value of `(current-active-maps)' at that time. This is used to
 figure out whether to invalidate the hash table for the next call
 to smex.")
+
+(defvar smex-known-backends nil
+  "Plist of known smex completion backends.")
+
+(defvar smex-temp-prompt-string nil
+  "if non-nil, overrides `smex-prompt-string' once.
+
+Each time `smex-prompt-with-prefix-arg' is called, this is reset
+to nil.")
+
+
+;;--------------------------------------------------------------------------------
+;; Smex Internals
+
+(defun smex-get-command-name (cmd)
+  "Return CMD as a string.
+
+CMD can be a string, symbol, or cons cell whose `car' is a string
+or symbol."
+  (cond
+   ((symbolp cmd)
+    (symbol-name cmd))
+   ((consp cmd)
+    (smex-get-command-name (car cmd)))
+   ((stringp cmd)
+    cmd)
+   (t
+    (error "Unrecognized command: %s" cmd))))
+
+(defun smex-get-default (choices)
+  "Get the first entry from CHOICES as a string."
+  (smex-clean-command-name
+   (smex-get-command-name
+    (car
+     (if (listp choices)
+         choices
+       (all-completions "" choices))))))
+
+(cl-defstruct smex-backend
+  name
+  comp-fun
+  get-text-fun
+  exit-fun)
 
 ;;--------------------------------------------------------------------------------
 ;; Smex Interface
@@ -224,51 +285,12 @@ to smex.")
 This should work for most completion backends."
   (execute-kbd-macro (kbd "RET")))
 
-;; TODO find a home
-(defun smex-get-command-name (cmd)
-  "Return CMD as a string.
-
-CMD can be a string, symbol, or cons cell whose `car' is a string
-or symbol."
-  (cond
-   ((symbolp cmd)
-    (symbol-name cmd))
-   ((consp cmd)
-    (smex-get-command-name (car cmd)))
-   ((stringp cmd)
-    cmd)
-   (t
-    (error "Unrecognized command: %s" cmd))))
-
-;; TODO find a home
-(defun smex-get-default (choices)
-  (smex-clean-command-name
-   (smex-get-command-name
-    (car
-     (if (listp choices)
-         choices
-       (all-completions "" choices))))))
-
-;; TODO find a home
-(cl-defstruct smex-backend
-  name
-  comp-fun
-  get-text-fun
-  exit-fun)
-
 (cl-defun smex-completing-read (choices &key initial-input predicate)
   (let ((smex-minibuffer-depth (1+ (minibuffer-depth)))
         (comp-fun (smex-backend-comp-fun (smex-get-backend))))
     (funcall comp-fun choices :initial-input initial-input
              ;; Work around a bug
              :predicate (or predicate #'identity))))
-
-;; TODO rehome
-(defvar smex-temp-prompt-string nil
-  "if non-nil, overrides `smex-prompt-string' once.
-
-Each time `smex-prompt-with-prefix-arg' is called, this is reset
-to nil.")
 
 (defun smex-prompt-with-prefix-arg ()
   (let ((smex-prompt-string
@@ -286,8 +308,8 @@ to nil.")
              (format "%d " (car current-prefix-arg)))))
        smex-prompt-string))))
 
-;; TODO join the other defvars
-(defvar smex-known-backends nil)
+;;--------------------------------------------------------------------------------
+;; Smex Pluggable Backends
 
 (cl-defun smex-define-backend (&key name comp-fun get-text-fun
                                     (exit-fun 'smex-default-exit-minibuffer))
@@ -765,21 +787,6 @@ symbol."
 
 ;;--------------------------------------------------------------------------------
 ;; Ignored commands
-
-;; NOTE: Use completion-table-with-predicate with string = nil to get auto-fallback
-
-(defvar smex-ignored-command-matchers
-  '("\\`self-insert-command\\'"
-    "\\`ad-Orig-"
-    "\\`menu-bar"
-    smex-command-marked-ignored-p
-    smex-command-obsolete-p
-    smex-command-mouse-interactive-p)
-  "List of regexps and/or functions.
-
-Commands that match one of these regexps and commands for which
-one of these functions returns non-nil will be hidden from the
-smex completion list.")
 
 (defun smex-command-ignored-p (command)
   "Return non-nil if COMMAND is ignored by smex completion.
