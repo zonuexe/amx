@@ -535,10 +535,11 @@ May not work for things like ido and ivy."
 
 (defun smex-save-to-file ()
   (interactive)
-  (smex-save-history)
-  (with-temp-file (expand-file-name smex-save-file)
-    (smex-pp smex-history)
-    (smex-pp smex-data)))
+  (when init-file-user
+    (smex-save-history)
+    (with-temp-file (expand-file-name smex-save-file)
+      (smex-pp smex-history)
+      (smex-pp smex-data))))
 
 ;;--------------------------------------------------------------------------------
 ;; Ranking
