@@ -86,19 +86,44 @@ Smex should keep a record.
 Must be set before initializing Smex."
   :type 'integer)
 
+(defcustom smex-show-key-bindings t
+  "If non-nil, show key binding while completing commands."
+  :type 'boolean)
+
 (defcustom smex-prompt-string "M-x "
   "String to display in the Smex prompt."
   :type 'string)
 
 (define-obsolete-variable-alias 'smex-flex-matching 'ido-enable-flex-matching "4.0")
 
-(defvar smex-initialized-p nil)
+(defvar smex-initialized-p nil
+  "If non-nil smex is initialized.")
+
 (defvar smex-cache)
 (defvar smex-data)
 (defvar smex-history)
-(defvar smex-command-count 0)
-(defvar smex-custom-action nil)
-(defvar smex-minibuffer-depth -1)
+
+(defvar smex-command-count 0
+  "Number of commands known to smex.")
+
+(defvar smex-custom-action nil
+  "If non-nil, smex will call this in place of `execute-extended-command'.")
+
+(defvar smex-minibuffer-depth -1
+  "Used to determin if smex \"owns\" the current active minibuffer.")
+
+(defvar smex-command-keybind-hash nil
+  "Hash table for translating between commands and key bindings.
+
+See `smex-make-keybind-hash'.")
+
+(defvar smex-last-active-maps nil
+  "List of keymaps last used to update `smex-command-keybind-hash'.
+
+When `smex-command-keybind-hash' is updated, this is set to the
+value of `(current-active-maps)' at that time. This is used to
+figure out whether to invalidate the hash table for the next call
+to smex.")
 
 ;;--------------------------------------------------------------------------------
 ;; Smex Interface
@@ -125,16 +150,26 @@ Must be set before initializing Smex."
      (lambda (_) (smex-update) (smex-read-and-run smex-cache new-initial-input)))))
 
 (defun smex-read-and-run (commands &optional initial-input)
-  (let* ((collection
+  (let* ((commands
+          ;; Add key bindings to completions
+          (if smex-show-key-bindings
+              (smex-augment-commands-with-keybinds commands)
+            commands))
+         (collection
           ;; Initially complete with only non-ignored commands, but if
-          ;; all of those are tuled out, allow completing with ignored
+          ;; all of those are ruled out, allow completing with ignored
           ;; commands.
           (apply-partially #'completion-table-with-predicate
                            commands
                            (lambda (cmd) (not (smex-command-ignored-p cmd)))
                            nil))
-         (chosen-item-name (smex-completing-read commands :initial-input initial-input))
-         (chosen-item (intern chosen-item-name)))
+         ;; Symbol
+         (chosen-item
+          (smex-clean-command-name
+           (smex-completing-read commands :initial-input initial-input)))
+         ;; String
+         (chosen-item-name (symbol-name chosen-item)))
+    (cl-assert (commandp chosen-item))
     (if smex-custom-action
         (let ((action smex-custom-action))
           (setq smex-custom-action nil)
@@ -207,12 +242,14 @@ or symbol."
 
 ;; TODO find a home
 (defun smex-get-default (choices)
-  (smex-get-command-name
-   (car
-    (if (listp choices)
-        choices
-      (all-completions "" choices)))))
+  (smex-clean-command-name
+   (smex-get-command-name
+    (car
+     (if (listp choices)
+         choices
+       (all-completions "" choices))))))
 
+;; TODO find a home
 (cl-defstruct smex-backend
   name
   comp-fun
@@ -282,7 +319,7 @@ to nil.")
   (require 'minibuf-eldef)
   (let ((minibuffer-completion-table choices)
         (prompt (concat (smex-prompt-with-prefix-arg)
-                        (format " [%s]: " (smex-get-default choices))))
+                        (format "[%s]: " (smex-get-default choices))))
         (prev-eldef-mode minibuffer-electric-default-mode))
     (unwind-protect
         (progn
@@ -577,12 +614,163 @@ Returns nil when reaching the end of the list."
     (setcdr (setcdr cell new-cell) next-cell)))
 
 ;;--------------------------------------------------------------------------------
+;; Display key bindings in completions
+
+(defun smex-make-keybind-hash (&optional keymap)
+  "Return a hash table of all commands that might be bound in KEYMAP.
+
+The KEYMAP argument is interpreted as in `where-is-internal'.
+
+The hash will actually contain two kinds of mappings. Symbol keys
+are mappings of command symbols to key bindings, while string
+keys are mappings of string representations of the command and
+its binding together, e.g. \"forward-char (C-f)\", to the command
+symbol by itself."
+  (let* ((keymap-list
+          (cond
+           ((keymapp keymap)
+            (list keymap global-map))
+           ((null keymap)
+            (current-active-maps))
+           ((listp keymap)
+            keymap)))
+         (composed-keymap
+          (make-composed-keymap keymap-list)))
+    (cl-loop
+     with bindhash = (make-hash-table :test 'equal)
+     for kseq being the key-seqs of composed-keymap using (key-bindings cmd)
+     for curbind = (gethash cmd bindhash)
+     ;; Only take the first binding for each command
+     if (and (not curbind) (commandp cmd))
+     ;; Let's abuse this hash by storing two different
+     ;; kinds of key/values pairs in it
+     do (progn
+          ;; cmd => key
+          (puthash cmd (key-description kseq) bindhash)
+          ;; "cmd (key)" => cmd, for looking up the original command
+          (puthash (format "%s (%s)" cmd (key-description kseq)) cmd bindhash))
+     finally return bindhash)))
+
+(defun smex-keymap-lists-equal (maps1 maps2)
+  "Return non-nil if MAPS1 and MAPS2 contain the same keymaps.
+
+The order of keymaps must be identical and the lists must have
+equal length.
+
+This is effectively `cl-every' except that it also requires the
+lists to end at the same time."
+  (cl-loop
+   for x1 on maps1
+   for x2 on maps2
+   if (not (eq (car x1) (car x2)))
+   return nil
+   ;; If both lists are the same length, both tails will be
+   ;; nil at the end
+   finally return (not (or x1 x2))))
+
+(defsubst smex-invalidate-keybind-hash ()
+  "Force a rebuild of `smex-command-keybind-hash'."
+  (setq smex-command-keybind-hash nil
+            smex-last-active-maps nil))
+
+(defun smex-maybe-invalidate-keybind-hash ()
+  "If `smex-command-keybind-hash' is stale, set it to nil.
+
+Returns non-nil if the hash is still valid and nil if it was
+invalidated. This uses `smex-last-active-maps' to figure out if
+the set of active key bindings has changed since the last rebuild
+of `smex-command-keybind-hash'."
+  (let ((valid
+         (and smex-command-keybind-hash
+              smex-last-active-maps
+              (smex-keymap-lists-equal smex-last-active-maps
+                                    (current-active-maps)))))
+    (unless valid
+      (smex-invalidate-keybind-hash))
+    valid))
+
+(defun smex-update-keybind-hash ()
+  "Update (if needed) and return `smex-command-keybind-hash'.
+
+ If so, it rebuilds it based on the
+current set of active keymaps.e"
+  (smex-maybe-invalidate-keybind-hash)
+  (or smex-command-keybind-hash
+      (setq smex-command-keybind-hash (smex-make-keybind-hash))))
+
+;; Need to invalidate the keybind hash if an active keymap is
+;; modified.
+(defun smex-handle-modified-keymap (keymap)
+  "If called on an active keymap, invalidate the smex keybind hash."
+  (when (memq keymap smex-last-active-maps)
+    (smex-invalidate-keybind-hash)))
+(advice-add 'define-key :after
+            (lambda (keymap &rest args)
+              (smex-handle-modified-keymap keymap)))
+(advice-add 'set-keymap-parent :after
+            (lambda (keymap &rest args)
+              (smex-handle-modified-keymap keymap)))
+(advice-add 'suppress-keymap :after
+            (lambda (keymap &rest args)
+              (smex-handle-modified-keymap keymap)))
+(advice-add 'substitute-key-definition :after
+            (lambda (olddef newdef keymap &rest args)
+              (smex-handle-modified-keymap keymap)))
+
+(defun smex-augment-commands-with-keybinds
+    (commands &optional bind-hash)
+  "Append key bindings from BIND-HASH to COMMANDS.
+
+Given a list of commands (either as symbols or cons cells in the
+form of `smex-cache'), returns an equivalent list, except that
+every command is converted to a string, and any command with a
+key binding recorded in `BIND-HASH will have that binding
+appended. By default, key bindings are looked up in
+`smex-command-keybind-hash', which is updated using
+`smex-make-keybind-hash' if necessary.
+
+In the returned list, each element will be a string."
+  (cl-loop
+   ;; Default to `smex-command-keybind-hash', updating it if
+   ;; necessary.
+   with bind-hash = (or bind-hash (smex-update-keybind-hash))
+   for cmd in commands
+   for cmdname = (smex-get-command-name cmd)
+   for cmdsym = (intern cmdname)
+   for keybind = (gethash cmdsym bind-hash)
+   if (and keybind (not (smex-command-ignored-p cmdsym)))
+   collect (format "%s (%s)" cmdname keybind)
+   else
+   collect cmdname))
+
+(defun smex-clean-command-name (command-name)
+  "Inverse of `smex-augment-commands-with-keybinds', approximately.
+
+Given a string starting with a command name and possibly ending
+with a key binding, it returns just the command name as a
+symbol."
+  (or
+   ;; First try getting it from the hash table
+   (and smex-command-keybind-hash
+        (gethash command-name smex-command-keybind-hash))
+   ;; Otherwise chop chars off the end until the result is a command
+   (cl-loop
+    for s = (cl-copy-seq command-name) then (substring s 0 -1)
+    do (message "Trying %S" s)
+    for sym = (intern-soft s)
+    if (and sym (commandp sym))
+    return sym
+    if (= 0 (length s))
+    do (error "Could not find command: %S" command-name))))
+
+;;--------------------------------------------------------------------------------
 ;; Ignored commands
 
 ;; NOTE: Use completion-table-with-predicate with string = nil to get auto-fallback
 
 (defvar smex-ignored-command-matchers
-  '("\\`ad-Orig-"
+  '("\\`self-insert-command\\'"
+    "\\`ad-Orig-"
     "\\`menu-bar"
     smex-command-marked-ignored-p
     smex-command-obsolete-p
@@ -601,6 +789,10 @@ See `smex-ignored-command-matchers'."
   ;; command symbol.
   (when (consp command)
     (setq command (car command)))
+  ;; Command might be a string like "CMD (KEY)", requiring a lookup of
+  ;; the real command name
+  (when (stringp command)
+    (setq command (gethash command smex-command-keybind-hash (intern command))))
   (cl-loop
    with matched = nil
    for matcher in smex-ignored-command-matchers
@@ -610,8 +802,8 @@ See `smex-ignored-command-matchers'."
    ;; function
    else
    do (setq matched (funcall matcher command))
-   if matched return matched
-   finally return matched))
+   if matched return t
+   finally return nil))
 
 (defun smex-command-marked-ignored-p (command)
   "Return non-nil if COMMAND's `smex-ignored' property is non-nil.
