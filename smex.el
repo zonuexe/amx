@@ -69,21 +69,32 @@ By default, an appropriate method is selected based on whether
           (symbol :tag "Custom backend")))
 (define-obsolete-variable-alias 'smex-completion-method 'smex-backend "4.0")
 
-(defcustom smex-auto-update t
-  "If non-nil, `Smex' checks for new commands each time it is run.
-Turn it off for minor speed improvements on older systems."
-  :type 'boolean)
+(defcustom smex-auto-update-interval nil
+  "Time in minutes between periodic updates of the command list.
+
+Smex already updates the command list after functions like `load'
+and `eval-expression' that could possibly define new commands.
+Generally this should be enough to catch all newly-loaded
+commands, but just in case any slip through, you can enable
+periodic updates to catch them. If this variable is nil, no
+periodic updates will be performed."
+  :type '(choice (const :tag "Disabled" nil)
+                 (number :tag "Minutes")))
+
+(make-obsolete-variable 'smex-auto-update "Set `smex-auto-update-interval' instead." "4.0")
 
 (defcustom smex-save-file (locate-user-emacs-file "smex-items" ".smex-items")
   "File in which the smex state is saved between Emacs sessions.
 Variables stored are: `smex-data', `smex-history'.
 Must be set before initializing Smex."
+  ;; TODO allow this to be set any time
   :type 'string)
 
 (defcustom smex-history-length 7
   "Determines on how many recently executed commands
 Smex should keep a record.
 Must be set before initializing Smex."
+  ;; TODO allow this to be set any time
   :type 'integer)
 
 (defcustom smex-show-key-bindings t
@@ -153,6 +164,12 @@ to smex.")
 Each time `smex-prompt-with-prefix-arg' is called, this is reset
 to nil.")
 
+(defvar smex-idle-update-timer nil)
+
+(defvar smex-last-update-time nil
+  "Time when `smex-update' was last run.
+
+If nil, a `smex-update' is needed ASAP.")
 
 ;;--------------------------------------------------------------------------------
 ;; Smex Internals
@@ -191,7 +208,7 @@ or symbol."
     (smex-initialize))
   (if (smex-active)
       (smex-update-and-rerun)
-    (and smex-auto-update (smex-update-if-needed))
+    (smex-update-if-needed)
     (smex-read-and-run smex-cache)))
 
 (defun smex-active ()
@@ -475,7 +492,8 @@ May not work for things like ido and ivy."
 (defun smex-update ()
   (interactive)
   (smex-save-history)
-  (smex-rebuild-cache))
+  (smex-rebuild-cache)
+  (setq smex-last-update-time (current-time)))
 
 (defun smex-detect-new-commands ()
   (let ((i 0))
@@ -483,13 +501,16 @@ May not work for things like ido and ivy."
     (unless (= i smex-command-count)
       (setq smex-command-count i))))
 
-(defun smex-update-if-needed ()
-  (if (smex-detect-new-commands) (smex-update)))
+(defun smex-update-if-needed (&optional count-commands)
+  "Run `smex-update' if necessary.
 
-(defun smex-auto-update (&optional idle-time)
-  "Update Smex when Emacs has been idle for IDLE-TIME."
-  (unless idle-time (setq idle-time 60))
-  (run-with-idle-timer idle-time t 'smex-update-if-needed))
+If `smex-last-update-time' is nil, do an update unconditionally.
+Otherwise, if optional arg COUNT-COMMANDS is non-nil, count the
+total number of defined commands in `obarray' and update if it
+has changed."
+  (if (or (null smex-last-update-time)
+          (smex-detect-new-commands))
+      (smex-update)))
 
 ;;;###autoload
 (defun smex-initialize ()
@@ -921,6 +942,8 @@ reversing the effect of a previous `smex-ignore'. "
   (interactive)
   (smex-do-with-selected-item 'find-function))
 
+;; TODO: These are redundant with the keymap functions I wrote. DRY it
+;; out.
 (defun smex-extract-commands-from-keymap (keymap)
   (let (commands)
     (smex-parse-keymap keymap commands)
@@ -979,24 +1002,31 @@ sorted by frequency of use."
 ;;--------------------------------------------------------------------------------
 ;; Auto Update
 
-(defmacro smex-auto-update-after (&rest functions)
-  "Advise each of FUNCTIONS to execute smex-update upon completion."
-  (cons
-   'progn
-   (mapcar (lambda (fun)
-             `(defadvice ,fun (after smex-update activate)
-                "Run smex-update upon completion"
-                (ignore-errors
-                  (when (and smex-initialized smex-auto-update)
-                    (smex-update-if-needed)))))
-           ;; Defining advice on `eval' causes infinite recursion, so
-           ;; don't allow that.
-           (cl-delete-if (apply-partially 'equal 'eval)
-                         functions))))
+;; This timer will run every time Emacs is idle for 1 second, but most
+;; of the time it will do nothing.
+(setq smex-idle-update-timer
+      (run-with-idle-timer
+       1 t
+       (lambda ()
+         (let ((do-recount
+                ;; If periodic updates are enabled, force a thorough
+                ;; check for new commands after the auto-update
+                ;; interval has elapsed.
+                (and smex-auto-update-interval
+                     smex-last-update-time
+                     (> (float-time (time-since smex-last-update-time))
+                        (* 60 smex-auto-update-interval)))))
+           (smex-update-if-needed do-recount)))))
 
-;; If you call `smex-update' after every invocation of just these few
-;; functions, you almost never need any other updates.
-(smex-auto-update-after load eval-last-sexp eval-buffer eval-region eval-expression)
+(defun smex-post-eval-force-update (&rest args)
+  ;; Setting this will force an update the next time Emacs is idle
+  (setq smex-last-update-time nil))
+
+;; It's pretty much impossible to define a new command without going
+;; through one of these 4 functions, so updating after any of them is
+;; called should catch all new command definitions.
+(cl-loop for fun in '(load eval-last-sexp eval-buffer eval-region eval-expression)
+         do (advice-add fun :after #'smex-post-eval-force-update))
 
 (provide 'smex)
 ;;; smex.el ends here
