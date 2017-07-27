@@ -60,6 +60,12 @@ value of `(current-active-maps)' at that time. This is used to
 figure out whether to invalidate the hash table for the next call
 to smex.")
 
+(defvar smex-origin-buffer nil
+  "The buffer smex was called from.
+
+This is used to determine which buffer's key bindings to use when
+`smex-show-key-bindings' is non-nil.")
+
 (defvar smex-known-backends nil
   "Plist of known smex completion backends.")
 
@@ -239,7 +245,9 @@ or symbol."
      (lambda (_) (smex-update) (smex-read-and-run smex-cache new-initial-input)))))
 
 (defun smex-read-and-run (commands &optional initial-input)
-  (let* ((commands
+  (let* ((smex-origin-buffer
+          (or smex-origin-buffer (current-buffer)))
+         (commands
           ;; Add key bindings to completions
           (if smex-show-key-bindings
               (smex-augment-commands-with-keybinds commands)
@@ -751,7 +759,10 @@ symbol by itself."
            ((keymapp keymap)
             (list keymap global-map))
            ((null keymap)
-            (current-active-maps))
+            ;; Run `current-active-maps' in `smex-origin-buffer' if
+            ;; any
+            (with-current-buffer (or smex-origin-buffer (current-buffer))
+              (current-active-maps)))
            ((listp keymap)
             keymap)))
          (composed-keymap
@@ -803,8 +814,10 @@ of `smex-command-keybind-hash'."
   (let ((valid
          (and smex-command-keybind-hash
               smex-last-active-maps
-              (smex-keymap-lists-equal smex-last-active-maps
-                                    (current-active-maps)))))
+              (smex-keymap-lists-equal
+               smex-last-active-maps
+               (with-current-buffer (or smex-origin-buffer (current-buffer))
+                 (current-active-maps))))))
     (unless valid
       (smex-invalidate-keybind-hash))
     valid))
