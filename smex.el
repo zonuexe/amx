@@ -455,7 +455,9 @@ May not work for things like ido and ivy."
   (let ((smex-backend
          (cond
           ((bound-and-true-p ivy-mode) 'ivy)
-          ((bound-and-true-p ido-mode) 'ido)
+          ((or (bound-and-true-p ido-mode)
+               (bound-and-true-p ido-ubiquitous-mode))
+           'ido)
           (t 'standard))))
     (smex-completing-read choices :initial-input initial-input :predicate predicate)))
 
