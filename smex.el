@@ -380,9 +380,10 @@ minibuffer.."
               (lambda ()
                 (use-local-map (make-composed-keymap
                                 (list smex-map (current-local-map)))))
-            (completing-read prompt choices predicate t initial-input
-                             'extended-command-history
-                             (smex-get-default choices))))
+            (completing-read-default
+             prompt choices predicate t initial-input
+             'extended-command-history
+             (smex-get-default choices))))
       (minibuffer-electric-default-mode
        (if prev-eldef-mode 1 0)))))
 
