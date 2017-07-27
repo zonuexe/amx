@@ -30,6 +30,13 @@
 (require 'cl-lib)
 (require 'ido)
 
+(cl-defstruct smex-backend
+  name
+  required-feature
+  comp-fun
+  get-text-fun
+  exit-fun)
+
 (defgroup smex nil
   "M-x interface with Ido-style fuzzy matching and ranking heuristics."
   :group 'extensions
@@ -49,36 +56,6 @@
         (global-set-key [remap execute-extended-command] 'smex))
     (when (eq (global-key-binding [remap execute-extended-command]) 'smex)
       (global-unset-key [remap execute-extended-command]))))
-
-(defcustom smex-backend 'auto
-  "Completion function to select a candidate from a list of strings.
-
-This function should take the same arguments as
-`smex-completing-read': CHOICES and INITIAL-INPUT.
-
-By default, an appropriate method is selected based on whether
-`ivy-mode' or `ido-mode' is enabled."
-  :type '(choice
-          (const :tag "Auto-select" auto)
-          (const :tag "Ido" ido)
-          (const :tag "Ivy" ivy)
-          (const :tag "Standard" standard)
-          (symbol :tag "Custom backend"))
-  :set #'smex-set-backend)
-(define-obsolete-variable-alias 'smex-completion-method 'smex-backend "4.0")
-
-(defun smex-set-backend (symbol value)
-  "Arguments are as `set-default'.
-
-This function will not set the backend unless it can require the
-associated feature, if any."
-  (let ((feature (smex-backend-required-feature)))
-    (when feature
-      (unless (require feature nil 'noerror)
-        (error "You must install %s to use the %s backend for smex"
-               feature (smex-backend-name value)))))
-  ;; If we got through that, then actually set the variabel
-  (set-default symbol value))
 
 (defcustom smex-auto-update-interval nil
   "Time in minutes between periodic updates of the command list.
@@ -334,13 +311,6 @@ minibuffer.."
 ;;--------------------------------------------------------------------------------
 ;; Pluggable Backends
 
-(cl-defstruct smex-backend
-  name
-  required-feature
-  comp-fun
-  get-text-fun
-  exit-fun)
-
 (cl-defun smex-define-backend (&key name comp-fun get-text-fun
                                     (exit-fun 'smex-default-exit-minibuffer)
                                     required-feature)
@@ -458,6 +428,40 @@ May not work for things like ido and ivy."
  :comp-fun 'smex-completing-read-auto
  :get-text-fun (lambda () (error "This exit function should never be called."))
  :exit-fun (lambda () (error "This get-text function should never be called.")))
+
+(defun smex-set-backend (symbol value)
+  "Custom setter for `smex-backend'.
+
+Arguments are the same as in `set-default'.
+
+This function will refuse to set the backend unless it can load
+the associated feature, if any."
+  (let* ((backend (or (plist-get smex-known-backends value)
+                      (error "Unknown smex backend: %s" value)))
+         (feature (smex-backend-required-feature backend)))
+    (when feature
+      (unless (require feature nil 'noerror)
+        (error "You must install %s to use the %s backend for smex"
+               feature value))))
+  ;; If we got through that, then actually set the variable
+  (set-default symbol value))
+
+(defcustom smex-backend 'auto
+  "Completion function to select a candidate from a list of strings.
+
+This function should take the same arguments as
+`smex-completing-read': CHOICES and INITIAL-INPUT.
+
+By default, an appropriate method is selected based on whether
+`ivy-mode' or `ido-mode' is enabled."
+  :type '(choice
+          (const :tag "Auto-select" auto)
+          (const :tag "Ido" ido)
+          (const :tag "Ivy" ivy)
+          (const :tag "Standard" standard)
+          (symbol :tag "Custom backend"))
+  :set #'smex-set-backend)
+(define-obsolete-variable-alias 'smex-completion-method 'smex-backend "4.0")
 
 ;;--------------------------------------------------------------------------------
 ;; Cache and Maintenance
@@ -1033,6 +1037,8 @@ sorted by frequency of use."
       (run-with-idle-timer
        1 t
        (lambda ()
+         (unless smex-initialized
+           (smex-initialize))
          (let ((do-recount
                 ;; If periodic updates are enabled, force a thorough
                 ;; check for new commands after the auto-update
