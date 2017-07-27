@@ -4,7 +4,7 @@
 ;;
 ;; Author: Cornelius Mika <cornelius.mika@gmail.com> and contributors
 ;; URL: http://github.com/nonsequitur/smex/
-;; Package-Requires: ((emacs "24.4") (ido-completing-read+ "4.1") (ivy "0"))
+;; Package-Requires: ((emacs "24.4"))
 ;; Version: 4.0
 ;; Keywords: convenience, usability
 
@@ -28,11 +28,7 @@
 ;;; Code:
 
 (require 'cl-lib)
-;; TODO: lazily load the appropriate backend when needed, perhaps
-;; falling back to `completing-read-default'
 (require 'ido)
-(require 'ido-completing-read+)
-(require 'ivy)
 
 (defgroup smex nil
   "M-x interface with Ido-style fuzzy matching and ranking heuristics."
@@ -42,6 +38,7 @@
 
 ;;;###autoload
 (define-minor-mode smex-mode
+  ;; TODO Update all references to ido
   "Use ido completion for M-x"
   :global t
   :group 'smex
@@ -66,8 +63,22 @@ By default, an appropriate method is selected based on whether
           (const :tag "Ido" ido)
           (const :tag "Ivy" ivy)
           (const :tag "Standard" standard)
-          (symbol :tag "Custom backend")))
+          (symbol :tag "Custom backend"))
+  :set #'smex-set-backend)
 (define-obsolete-variable-alias 'smex-completion-method 'smex-backend "4.0")
+
+(defun smex-set-backend (symbol value)
+  "Arguments are as `set-default'.
+
+This function will not set the backend unless it can require the
+associated feature, if any."
+  (let ((feature (smex-backend-required-feature)))
+    (when feature
+      (unless (require feature nil 'noerror)
+        (error "You must install %s to use the %s backend for smex"
+               feature (smex-backend-name value)))))
+  ;; If we got through that, then actually set the variabel
+  (set-default symbol value))
 
 (defcustom smex-auto-update-interval nil
   "Time in minutes between periodic updates of the command list.
@@ -289,9 +300,6 @@ or symbol."
   (setq ido-completion-map
         (make-composed-keymap (list smex-ido-map ido-completion-map))))
 
-(declare-function ivy-read "ext:ivy")
-(declare-function ivy-done "ext:ivy")
-
 (defun smex-default-exit-minibuffer ()
   "Run the key binding for RET.
 
@@ -328,17 +336,20 @@ minibuffer.."
 
 (cl-defstruct smex-backend
   name
+  required-feature
   comp-fun
   get-text-fun
   exit-fun)
 
 (cl-defun smex-define-backend (&key name comp-fun get-text-fun
-                                    (exit-fun 'smex-default-exit-minibuffer))
+                                    (exit-fun 'smex-default-exit-minibuffer)
+                                    required-feature)
   (cl-assert
-   (and (symbolp name)
-                  (functionp comp-fun)
-                  (functionp get-text-fun)
-                  (functionp exit-fun))
+   (and (symbolp name) name
+        (functionp comp-fun)
+        (functionp get-text-fun)
+        (functionp exit-fun)
+        (symbolp required-feature))
    nil
    "Invalid smex backend spec: (:name %S :comp-fun %S :get-text-fun %S :exit-fun %S)"
    (list name comp-fun get-text-fun exit-fun))
@@ -346,7 +357,8 @@ minibuffer.."
          (make-smex-backend :name name
                             :comp-fun comp-fun
                             :get-text-fun get-text-fun
-                            :exit-fun exit-fun)))
+                            :exit-fun exit-fun
+                            :required-feature required-feature)))
     (setq smex-known-backends
           (plist-put smex-known-backends name backend))))
 
@@ -388,8 +400,11 @@ May not work for things like ido and ivy."
  :comp-fun 'smex-completing-read-default
  :get-text-fun 'smex-default-get-text)
 
+(declare-function ido-completing-read+ "ext:ido-completing-read+")
+
 (cl-defun smex-completing-read-ido (choices &key initial-input predicate)
   "Smex backend for ido completion"
+  (require 'ido-completing-read+)
   (let ((ido-completion-map ido-completion-map)
         (ido-setup-hook (cons 'smex-prepare-ido-bindings ido-setup-hook))
         (minibuffer-completion-table choices))
@@ -403,10 +418,14 @@ May not work for things like ido and ivy."
 (smex-define-backend
  :name 'ido
  :comp-fun 'smex-completing-read-ido
- :get-text-fun 'smex-ido-get-text)
+ :get-text-fun 'smex-ido-get-text
+ :required-feature 'ido-completing-read+)
+
+(declare-function ivy-read "ext:ivy")
 
 (cl-defun smex-completing-read-ivy (choices &key initial-input predicate)
   "Smex backend for ivy completion"
+  (require 'ivy)
   (ivy-read (smex-prompt-with-prefix-arg) choices
             :predicate predicate
             :keymap smex-map
@@ -414,20 +433,23 @@ May not work for things like ido and ivy."
             :initial-input initial-input
             :preselect (smex-get-default choices)))
 
+(defvar ivy-text)
+
 (defun smex-ivy-get-text ()
   ivy-text)
 
 (smex-define-backend
  :name 'ivy
  :comp-fun 'smex-completing-read-ivy
- :get-text-fun 'smex-ivy-get-text)
+ :get-text-fun 'smex-ivy-get-text
+ :required-feature 'ivy)
 
 (cl-defun smex-completing-read-auto (choices &key initial-input predicate)
   "Automatically select between ivy, ido, and standard completion."
   (let ((smex-backend
          (cond
-          (ivy-mode 'ivy)
-          (ido-mode 'ido)
+          ((bound-and-true-p ivy-mode) 'ivy)
+          ((bound-and-true-p ido-mode) 'ido)
           (t 'standard))))
     (smex-completing-read choices :initial-input initial-input :predicate predicate)))
 
