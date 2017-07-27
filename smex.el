@@ -181,12 +181,6 @@ or symbol."
          choices
        (all-completions "" choices))))))
 
-(cl-defstruct smex-backend
-  name
-  comp-fun
-  get-text-fun
-  exit-fun)
-
 ;;--------------------------------------------------------------------------------
 ;; Smex Interface
 
@@ -283,7 +277,9 @@ or symbol."
 (defun smex-default-exit-minibuffer ()
   "Run the key binding for RET.
 
-This should work for most completion backends."
+This should work for most completion backends, without having to
+know exactly which functions each one uses to exit the
+minibuffer.."
   (execute-kbd-macro (kbd "RET")))
 
 (cl-defun smex-completing-read (choices &key initial-input predicate)
@@ -310,7 +306,13 @@ This should work for most completion backends."
        smex-prompt-string))))
 
 ;;--------------------------------------------------------------------------------
-;; Smex Pluggable Backends
+;; Pluggable Backends
+
+(cl-defstruct smex-backend
+  name
+  comp-fun
+  get-text-fun
+  exit-fun)
 
 (cl-defun smex-define-backend (&key name comp-fun get-text-fun
                                     (exit-fun 'smex-default-exit-minibuffer))
@@ -410,6 +412,7 @@ May not work for things like ido and ivy."
           (ido-mode 'ido)
           (t 'standard))))
     (smex-completing-read choices :initial-input initial-input :predicate predicate)))
+
 (smex-define-backend
  :name 'auto
  :comp-fun 'smex-completing-read-auto
@@ -530,6 +533,22 @@ May not work for things like ido and ivy."
          for i from 1 upto smex-history-length
          for (command-name . count) in smex-cache
          collect command-name)))
+
+;; A copy of `ido-pp' that's compatible with lexical bindings
+(defun smex-pp* (list list-name)
+  (let ((print-level nil) (eval-expression-print-level nil)
+        (print-length nil) (eval-expression-print-length nil))
+    (insert "\n;; ----- " list-name " -----\n(\n ")
+    (while list
+      (let* ((elt (car list))
+             (s (if (consp elt) (car elt) elt)))
+        (if (and (stringp s) (= (length s) 0))
+            (setq s nil))
+        (if s
+            (prin1 elt (current-buffer)))
+        (if (and (setq list (cdr list)) s)
+            (insert "\n "))))
+    (insert "\n)\n")))
 
 (defmacro smex-pp (list-var)
   `(smex-pp* ,list-var ,(symbol-name list-var)))
@@ -957,6 +976,9 @@ sorted by frequency of use."
     (set-buffer-modified-p nil)
     (goto-char (point-min))))
 
+;;--------------------------------------------------------------------------------
+;; Auto Update
+
 (defmacro smex-auto-update-after (&rest functions)
   "Advise each of FUNCTIONS to execute smex-update upon completion."
   (cons
@@ -975,22 +997,6 @@ sorted by frequency of use."
 ;; If you call `smex-update' after every invocation of just these few
 ;; functions, you almost never need any other updates.
 (smex-auto-update-after load eval-last-sexp eval-buffer eval-region eval-expression)
-
-;; A copy of `ido-pp' that's compatible with lexical bindings
-(defun smex-pp* (list list-name)
-  (let ((print-level nil) (eval-expression-print-level nil)
-        (print-length nil) (eval-expression-print-length nil))
-    (insert "\n;; ----- " list-name " -----\n(\n ")
-    (while list
-      (let* ((elt (car list))
-             (s (if (consp elt) (car elt) elt)))
-        (if (and (stringp s) (= (length s) 0))
-            (setq s nil))
-        (if s
-            (prin1 elt (current-buffer)))
-        (if (and (setq list (cdr list)) s)
-            (insert "\n "))))
-    (insert "\n)\n")))
 
 (provide 'smex)
 ;;; smex.el ends here
