@@ -11,6 +11,6 @@
              :files ("*.el"))
  (depends-on "buttercup"
              :git "https://github.com/DarwinAwardWinner/emacs-buttercup.git"
-             :branch "show-exprs"
+             :branch "bleeding-edge"
              :files ("*.el"
                      ("bin" "bin/*"))))
