@@ -784,23 +784,6 @@ symbol by itself."
           (puthash (format "%s (%s)" cmd (key-description kseq)) cmd bindhash))
      finally return bindhash)))
 
-(defun smex-keymap-lists-equal (maps1 maps2)
-  "Return non-nil if MAPS1 and MAPS2 contain the same keymaps.
-
-The order of keymaps must be identical and the lists must have
-equal length.
-
-This is effectively `cl-every' except that it also requires the
-lists to end at the same time."
-  (cl-loop
-   for x1 on maps1
-   for x2 on maps2
-   if (not (eq (car x1) (car x2)))
-   return nil
-   ;; If both lists are the same length, both tails will be
-   ;; nil at the end
-   finally return (not (or x1 x2))))
-
 (defsubst smex-invalidate-keybind-hash ()
   "Force a rebuild of `smex-command-keybind-hash'."
   (setq smex-command-keybind-hash nil
@@ -816,7 +799,7 @@ of `smex-command-keybind-hash'."
   (let ((valid
          (and smex-command-keybind-hash
               smex-last-active-maps
-              (smex-keymap-lists-equal
+              (equal
                smex-last-active-maps
                (with-current-buffer (or smex-origin-buffer (current-buffer))
                  (current-active-maps))))))
