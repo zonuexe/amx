@@ -784,8 +784,11 @@ symbol by itself."
           (puthash (format "%s (%s)" cmd (key-description kseq)) cmd bindhash))
      finally return bindhash)))
 
-(defsubst smex-invalidate-keybind-hash ()
-  "Force a rebuild of `smex-command-keybind-hash'."
+(defun smex-invalidate-keybind-hash (&rest args)
+  "Force a rebuild of `smex-command-keybind-hash'.
+
+This function takes any number of arguments and ignores them so
+that it can be used as advice on other functions."
   (setq smex-command-keybind-hash nil
             smex-last-active-maps nil))
 
@@ -794,8 +797,10 @@ symbol by itself."
 
 Returns non-nil if the hash is still valid and nil if it was
 invalidated. This uses `smex-last-active-maps' to figure out if
-the set of active key bindings has changed since the last rebuild
-of `smex-command-keybind-hash'."
+the set of active keymaps has changed since the last rebuild of
+`smex-command-keybind-hash'. Note that this function does not, by
+itself, detect when new keys are bound in the current active
+keymaps."
   (let ((valid
          (and smex-command-keybind-hash
               smex-last-active-maps
@@ -816,24 +821,13 @@ current set of active keymaps.e"
   (or smex-command-keybind-hash
       (setq smex-command-keybind-hash (smex-make-keybind-hash))))
 
-;; Need to invalidate the keybind hash if an active keymap is
-;; modified.
-(defun smex-handle-modified-keymap (keymap)
-  "If called on an active keymap, invalidate the smex keybind hash."
-  (when (memq keymap smex-last-active-maps)
-    (smex-invalidate-keybind-hash)))
-(advice-add 'define-key :after
-            (lambda (keymap &rest args)
-              (smex-handle-modified-keymap keymap)))
-(advice-add 'set-keymap-parent :after
-            (lambda (keymap &rest args)
-              (smex-handle-modified-keymap keymap)))
-(advice-add 'suppress-keymap :after
-            (lambda (keymap &rest args)
-              (smex-handle-modified-keymap keymap)))
-(advice-add 'substitute-key-definition :after
-            (lambda (olddef newdef keymap &rest args)
-              (smex-handle-modified-keymap keymap)))
+;; Since keymaps can contain other keymaps, checking whether these
+;; functions are affecting the current active maps (or any maps
+;; contained in them) is not much faster than just rebuilding the hash
+;; table from scratch.
+(cl-loop
+ for fun in '(define-key set-keymap-parent)
+ do (advice-add fun :before 'smex-invalidate-keybind-hash))
 
 (defsubst smex-augment-command-with-keybind (command &optional bind-hash)
   (let* ((cmdname (smex-get-command-name command))
@@ -876,7 +870,6 @@ symbol."
    ;; Otherwise chop chars off the end until the result is a command
    (cl-loop
     for s = (cl-copy-seq command-name) then (substring s 0 -1)
-    do (message "Trying %S" s)
     for sym = (intern-soft s)
     if (and sym (commandp sym))
     return sym
