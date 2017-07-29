@@ -1061,18 +1061,26 @@ sorted by frequency of use."
 (cl-loop for fun in '(load eval-last-sexp eval-buffer eval-region eval-expression)
          do (advice-add fun :after #'smex-post-eval-force-update))
 
-(defun smex-idle-update ()
+(defun smex-idle-update (&optional force)
+  "Function meant to be run in idle timers to update smex caches.
+
+Optional argument FORCE tells smex to completely rebuild all of
+its cached data, even if it believes that data is already
+current."
   (unless smex-initialized
     (smex-initialize))
   (let ((do-recount
-         ;; If periodic updates are enabled, force a thorough
-         ;; check for new commands after the auto-update
-         ;; interval has elapsed.
-         (and smex-auto-update-interval
-              smex-last-update-time
-              (> (float-time (time-since smex-last-update-time))
-                 (* 60 smex-auto-update-interval)))))
+         (or force
+             ;; If periodic updates are enabled, force a full search
+             ;; for new commands after the auto-update interval has
+             ;; elapsed.
+             (and smex-auto-update-interval
+                  smex-last-update-time
+                  (> (float-time (time-since smex-last-update-time))
+                     (* 60 smex-auto-update-interval))))))
     (smex-update-if-needed do-recount))
+  (when force
+    (smex-invalidate-keybind-hash))
   (smex-update-keybind-hash))
 
 ;; This does a quick update check every time emacs is idle
