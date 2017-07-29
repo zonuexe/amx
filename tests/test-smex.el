@@ -90,10 +90,15 @@ equal."
        smex-ignored-command-matchers
        smex-backend)))
 
+  (it "should execute the selected command"
+    (spy-on 'my-temp-command)
+    (with-simulated-input "my-temp-command RET"
+      (smex-read-and-run '(my-temp-command)))
+    (expect 'my-temp-command :to-have-been-called))
 
   (it "should not allow setting a backend without loading the required feature"
     ;; Override `require' to return nil to prevent loading of new features
-    (spy-on 'require :and-return nil)
+    (spy-on 'require :and-return-value nil)
     (expect
      (lambda ()
        (customize-set-variable 'smex-backend 'ido))
@@ -164,7 +169,7 @@ equal."
       (cl-loop
        for fun in
        '(completing-read-default ido-completing-read+ ivy-read)
-       do (spy-on fun :and-return "ignore")))
+       do (spy-on fun :and-return-value "ignore")))
 
     ;; Restore the saved value after each test
     (after-each
@@ -187,12 +192,15 @@ equal."
   (describe "with `smex-show-key-bindings'"
 
     :var (orig-local-map
+          orig-smex-completing-read
           my-key-sequence
-          temp-map)
+          temp-map
+          last-choice-list)
 
     (before-each
       ;; Save the information needed to undo everything
       (setq orig-local-map (current-local-map)
+            orig-smex-completing-read (symbol-function 'smex-completing-read)
             temp-map (make-sparse-keymap)
             my-key-sequence (canonicalize-key-sequence "C-M-A-H-s-a"))
       ;; Reversibly add a custom binding to the local map
@@ -200,19 +208,24 @@ equal."
       (use-local-map (make-composed-keymap temp-map orig-local-map))
       ;; Ido lets us select entries using any substring
       (customize-set-variable 'smex-backend 'ido)
-      (setq smex-show-key-bindings t)
+      (customize-set-variable 'smex-show-key-bindings t)
       ;; Start with an up-to-date keybind hash (before setting up
       ;; spies, so none of the spies' call counters are incremented
       ;; yet)
+      (smex-update)
       (smex-update-keybind-hash)
       (spy-on 'smex-completing-read :and-call-fake
-              'smex-completing-read-return-first-choice)
+              ;; Save the choices list and then call original
+              (cl-function
+               (lambda (choices &key initial-input predicate)
+                 (setq last-choice-list (all-completions "" choices predicate))
+                 (funcall orig-smex-completing-read choices
+                          :initial-input initial-input
+                          :predicate predicate))))
       (spy-on 'smex-augment-commands-with-keybinds :and-call-through)
       (spy-on 'smex-update-keybind-hash :and-call-through)
       (spy-on 'smex-make-keybind-hash :and-call-through)
       (spy-on 'smex-invalidate-keybind-hash :and-call-through)
-      (spy-on 'my-temp-command)
-
       ;; Don't actually execute selected commands
       (spy-on 'execute-extended-command))
 
@@ -223,41 +236,67 @@ equal."
     (it "should add key bindings successfully"
       (expect
        (cl-some
-        (apply-partially 'string-match-p (regexp-quote my-key-sequence))
+        (apply-partially 's-contains? my-key-sequence)
         (smex-augment-commands-with-keybinds '(my-temp-command)))))
 
-    (it "should show key bindings when enabled"
-      (setq smex-show-key-bindings t)
-      ;; TODO: override smex-completing-read to `expect' keybinding
-      (smex-read-and-run '("my-temp-command"))
-      (expect 'smex-augment-commands-with-keybinds :to-have-been-called))
+    (it "should show key bindings and update the keybind hash when enabled"
+      (with-simulated-input "RET"
+        (smex-read-and-run smex-cache "my-temp-command"))
+      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
+      (expect 'smex-augment-commands-with-keybinds :to-have-been-called)
+      (expect (cl-some (apply-partially 's-contains? my-key-sequence)
+                       last-choice-list)))
 
-    (it "should not show key bindings when disabled"
+    (it "should allow completion on key bindings"
+      ;; Needed to avoid scoping issues with macro
+      (eval
+       `(with-simulated-input "RET"
+          (smex-read-and-run smex-cache ,my-key-sequence)))
+      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command"))
+
+    (it "should not show key bindings or update the keybind hash when disabled"
       (setq smex-show-key-bindings nil)
-      ;; TODO: override smex-completing-read to `expect' keybinding
-      (smex-read-and-run '("my-temp-command"))
+      (smex-invalidate-keybind-hash)
+      (with-simulated-input "RET"
+        (smex-read-and-run smex-cache "my-temp-command"))
+      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
       (expect 'smex-augment-commands-with-keybinds :not :to-have-been-called)
-      (expect 'smex-update-keybind-hash :not :to-have-been-called))
+      (expect 'smex-make-keybind-hash :not :to-have-been-called)
+      (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
+                            last-choice-list))))
 
-    (it "should update the keybind hash after binding a command in an active map"
+    (it "should update the keybind hash after any keymap is modified"
       (setq smex-show-key-bindings t)
-      ;; Call `define-key' on an active map
+      ;; Call `define-key'
       (define-key temp-map my-key-sequence 'my-temp-command)
       (expect 'smex-invalidate-keybind-hash :to-have-been-called)
-      (expect
-       (lambda ()
-         (smex-read-and-run '("my-temp-command")))
-       :not :to-throw)
+      (with-simulated-input "RET"
+        (smex-read-and-run smex-cache "my-temp-command"))
+      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
       (expect 'smex-augment-commands-with-keybinds :to-have-been-called)
-      (expect 'smex-update-keybind-hash :to-have-been-called))
+      (expect 'smex-make-keybind-hash :to-have-been-called))
 
-    (it "should not update the keybind hash after binding a command in an inactive map")
+    (it "should use `smex-origin-buffer' instead of current buffer when looking up key binds"
+      (setq smex-show-key-bindings t)
+      (with-temp-buffer
+        (let ((smex-origin-buffer (current-buffer)))
+          ;; Now my-temp-command is not bound in active maps, so its
+          ;; key binding should not show up in completions
+          (with-simulated-input "RET"
+            (smex-read-and-run smex-cache "my-temp-command"))
+          (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
+          (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
+                                last-choice-list))))))
 
-    (it "should use `smex-origin-buffer' instead of current buffer when looking up key binds")
-
-    (it "should not show key bindings when disabled")
-
-    (it "should not update the key binding hash table when disabled"))
+    (it "should update the keybind hash after switching buffers"
+      (setq smex-show-key-bindings t)
+      (with-temp-buffer
+        (let ((smex-origin-buffer (current-buffer)))
+          (with-simulated-input "RET"
+            (smex-read-and-run smex-cache "my-temp-command"))
+          (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
+          (expect 'smex-augment-commands-with-keybinds :to-have-been-called)
+          (expect 'smex-update-keybind-hash :to-have-been-called)))))
 
   (describe "auto-update functionality"
 
