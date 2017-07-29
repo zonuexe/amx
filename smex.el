@@ -1063,16 +1063,17 @@ sorted by frequency of use."
 
 (defun smex-idle-update ()
   (unless smex-initialized
-           (smex-initialize))
-         (let ((do-recount
-                ;; If periodic updates are enabled, force a thorough
-                ;; check for new commands after the auto-update
-                ;; interval has elapsed.
-                (and smex-auto-update-interval
-                     smex-last-update-time
-                     (> (float-time (time-since smex-last-update-time))
-                        (* 60 smex-auto-update-interval)))))
-           (smex-update-if-needed do-recount)))
+    (smex-initialize))
+  (let ((do-recount
+         ;; If periodic updates are enabled, force a thorough
+         ;; check for new commands after the auto-update
+         ;; interval has elapsed.
+         (and smex-auto-update-interval
+              smex-last-update-time
+              (> (float-time (time-since smex-last-update-time))
+                 (* 60 smex-auto-update-interval)))))
+    (smex-update-if-needed do-recount))
+  (smex-update-keybind-hash))
 
 ;; This does a quick update check every time emacs is idle
 (setq smex-short-idle-update-timer
