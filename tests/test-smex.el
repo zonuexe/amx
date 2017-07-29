@@ -76,7 +76,9 @@ equal."
        smex-ignored-command-matchers
        smex-backend))
     ;; Don't save anything to disk during testing
-    (setq smex-save-file nil))
+    (setq smex-save-file nil)
+    ;; Start each test with smex caches fully updated
+    (smex-idle-update t))
 
   ;; Restore the saved value after each test
   (after-each
@@ -209,11 +211,6 @@ equal."
       ;; Ido lets us select entries using any substring
       (customize-set-variable 'smex-backend 'ido)
       (customize-set-variable 'smex-show-key-bindings t)
-      ;; Start with an up-to-date keybind hash (before setting up
-      ;; spies, so none of the spies' call counters are incremented
-      ;; yet)
-      (smex-update)
-      (smex-update-keybind-hash)
       (spy-on 'smex-completing-read :and-call-fake
               ;; Save the choices list and then call original
               (cl-function
