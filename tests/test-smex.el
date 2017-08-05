@@ -335,13 +335,24 @@ equal."
 
 
 
-  (describe "smex-mode"
+  (describe "`smex-mode'"
+
+    :var (smex-mode
+          orig-smex-mode)
 
     (before-each
+      (setq orig-smex-mode smex-mode)
       (smex-mode 1))
+    (after-each
+      (smex-mode orig-smex-mode))
 
-    (it "should replace M-x when enabled")
+    (it "should replace M-x when enabled"
+      (expect (key-binding [remap execute-extended-command])
+              :to-be 'smex))
 
-    (it "should not replace M-x when disabled")))
+    (it "should not replace M-x when disabled"
+      (smex-mode 0)
+      (expect (key-binding [remap execute-extended-command])
+              :not :to-be 'smex))))
 
 ;;; test-smex.el ends here
