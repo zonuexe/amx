@@ -96,7 +96,8 @@ equal."
     (spy-on 'my-temp-command)
     (with-simulated-input "my-temp-command RET"
       (smex-read-and-run '(my-temp-command)))
-    (expect 'my-temp-command :to-have-been-called))
+    (expect 'my-temp-command
+            :to-have-been-called))
 
   (it "should not allow setting a backend without loading the required feature"
     ;; Override `require' to return nil to prevent loading of new features
@@ -118,8 +119,10 @@ equal."
        (with-simulated-input "ignore RET"
          (smex-completing-read '("ignore")))
        :to-equal "ignore")
-      (expect 'completing-read-default :to-have-been-called)
-      (expect 'completing-read :not :to-have-been-called)))
+      (expect 'completing-read-default
+              :to-have-been-called)
+      (expect 'completing-read :not
+              :to-have-been-called)))
 
   (describe "ido backend"
 
@@ -136,7 +139,8 @@ equal."
        (with-simulated-input "ignore RET"
          (smex-completing-read '("ignore")))
        :to-equal "ignore")
-      (expect 'ido-completing-read+ :to-have-been-called)))
+      (expect 'ido-completing-read+
+              :to-have-been-called)))
 
   (describe "ivy backend"
 
@@ -153,7 +157,8 @@ equal."
        (with-simulated-input "ignore RET"
          (smex-completing-read '("ignore")))
        :to-equal "ignore")
-      (expect 'ivy-read :to-have-been-called)))
+      (expect 'ivy-read
+              :to-have-been-called)))
 
   (describe "auto backend"
 
@@ -179,17 +184,20 @@ equal."
 
     (it "should normally use standard completion"
       (smex-completing-read '("ignore"))
-      (expect 'completing-read-default :to-have-been-called))
+      (expect 'completing-read-default
+              :to-have-been-called))
 
     (it "should use ido completion when `ido-mode' or `ido-ubiquitous-mode' are enabled"
       (ido-mode 1)
       (smex-completing-read '("ignore"))
-      (expect 'ido-completing-read+ :to-have-been-called))
+      (expect 'ido-completing-read+
+              :to-have-been-called))
 
     (it "should use ivy completion when `ivy-mode' is enabled"
       (ivy-mode 1)
       (smex-completing-read '("ignore"))
-      (expect 'ivy-read :to-have-been-called)))
+      (expect 'ivy-read
+              :to-have-been-called)))
 
   (describe "with `smex-show-key-bindings'"
 
@@ -239,8 +247,10 @@ equal."
     (it "should show key bindings and update the keybind hash when enabled"
       (with-simulated-input "RET"
         (smex-read-and-run smex-cache "my-temp-command"))
-      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
-      (expect 'smex-augment-commands-with-keybinds :to-have-been-called)
+      (expect 'execute-extended-command
+              :to-have-been-called-with nil "my-temp-command")
+      (expect 'smex-augment-commands-with-keybinds
+              :to-have-been-called)
       (expect (cl-some (apply-partially 's-contains? my-key-sequence)
                        last-choice-list)))
 
@@ -249,16 +259,20 @@ equal."
       (eval
        `(with-simulated-input "RET"
           (smex-read-and-run smex-cache ,my-key-sequence)))
-      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command"))
+      (expect 'execute-extended-command
+              :to-have-been-called-with nil "my-temp-command"))
 
     (it "should not show key bindings or update the keybind hash when disabled"
       (setq smex-show-key-bindings nil)
       (smex-invalidate-keybind-hash)
       (with-simulated-input "RET"
         (smex-read-and-run smex-cache "my-temp-command"))
-      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
-      (expect 'smex-augment-commands-with-keybinds :not :to-have-been-called)
-      (expect 'smex-make-keybind-hash :not :to-have-been-called)
+      (expect 'execute-extended-command
+              :to-have-been-called-with nil "my-temp-command")
+      (expect 'smex-augment-commands-with-keybinds
+              :not :to-have-been-called)
+      (expect 'smex-make-keybind-hash
+              :not :to-have-been-called)
       (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
                             last-choice-list))))
 
@@ -266,12 +280,16 @@ equal."
       (setq smex-show-key-bindings t)
       ;; Call `define-key'
       (define-key temp-map my-key-sequence 'my-temp-command)
-      (expect 'smex-invalidate-keybind-hash :to-have-been-called)
+      (expect 'smex-invalidate-keybind-hash
+              :to-have-been-called)
       (with-simulated-input "RET"
         (smex-read-and-run smex-cache "my-temp-command"))
-      (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
-      (expect 'smex-augment-commands-with-keybinds :to-have-been-called)
-      (expect 'smex-make-keybind-hash :to-have-been-called))
+      (expect 'execute-extended-command
+              :to-have-been-called-with nil "my-temp-command")
+      (expect 'smex-augment-commands-with-keybinds
+              :to-have-been-called)
+      (expect 'smex-make-keybind-hash
+              :to-have-been-called))
 
     (it "should use `smex-origin-buffer' instead of current buffer when looking up key binds"
       (setq smex-show-key-bindings t)
@@ -281,7 +299,8 @@ equal."
           ;; key binding should not show up in completions
           (with-simulated-input "RET"
             (smex-read-and-run smex-cache "my-temp-command"))
-          (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
+          (expect 'execute-extended-command
+                  :to-have-been-called-with nil "my-temp-command")
           (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
                                 last-choice-list))))))
 
@@ -291,9 +310,12 @@ equal."
         (let ((smex-origin-buffer (current-buffer)))
           (with-simulated-input "RET"
             (smex-read-and-run smex-cache "my-temp-command"))
-          (expect 'execute-extended-command :to-have-been-called-with nil "my-temp-command")
-          (expect 'smex-augment-commands-with-keybinds :to-have-been-called)
-          (expect 'smex-update-keybind-hash :to-have-been-called)))))
+          (expect 'execute-extended-command
+                  :to-have-been-called-with nil "my-temp-command")
+          (expect 'smex-augment-commands-with-keybinds
+                  :to-have-been-called)
+          (expect 'smex-update-keybind-hash
+                  :to-have-been-called)))))
 
   (describe "auto-update functionality"
 
