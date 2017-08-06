@@ -576,10 +576,10 @@ If `smex-last-update-time' is nil, do an update unconditionally.
 Otherwise, if optional arg COUNT-COMMANDS is non-nil, count the
 total number of defined commands in `obarray' and update if it
 has changed."
-  (if (or (null smex-last-update-time)
-          (and count-commands
-               (smex-detect-new-commands)))
-      (smex-update)))
+  (when (or (null smex-last-update-time)
+            (and count-commands
+                 (smex-detect-new-commands)))
+    (smex-update)))
 
 ;;;###autoload
 (defun smex-initialize ()
