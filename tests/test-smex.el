@@ -61,6 +61,10 @@ equal."
   (interactive)
   (message "Ran my-temp-command"))
 
+;; Need a non-lexical var to work around a scoping bug in
+;; with-simulated-input
+(defvar temp-variable)
+
 (describe "The smex package"
 
   ;; Reset all of these variables to their standard values before each
@@ -323,15 +327,62 @@ equal."
 
   (describe "auto-update functionality"
 
-    (xit "should force an update when idle for `auto-update-interval'"
-      (customize-set-variable 'smex-auto-update-interval 60)
+    :var (smex-last-update-time)
+
+    (before-each
       (spy-on 'smex-idle-update :and-call-through)
-      (spy-on 'smex- :and-call-through)
-      (wsi-simulate-idle-time 1))
+      (spy-on 'smex-update-if-needed :and-call-through)
+      (spy-on 'smex-detect-new-commands :and-call-through)
+      (spy-on 'smex-update :and-call-through))
 
-    (it "should cancel the long-update timer when `auto-update-interval' is nil")
+    (it "should not force an update on the short idle timer"
+      ;; Trigger a short idle update
+      (smex-idle-update)
+      (expect 'smex-idle-update
+              :to-have-been-called)
+      (expect 'smex-update-if-needed
+              :to-have-been-called)
+      (expect 'smex-detect-new-commands
+              :not :to-have-been-called)
+      (expect 'smex-update
+              :not :to-have-been-called))
 
-    (it "should force an update 1 second after clearing `smex-last-update-time'"))
+    (it "should do an update on the short idle timer when needed"
+      (smex-post-eval-force-update)
+      ;; No update runs yet
+      (expect 'smex-idle-update
+              :not :to-have-been-called)
+      ;; Trigger a short idle update
+      (smex-idle-update)
+      (expect 'smex-idle-update
+              :to-have-been-called)
+      (expect 'smex-update-if-needed
+              :to-have-been-called)
+      (expect 'smex-detect-new-commands
+              :not :to-have-been-called)
+      (expect 'smex-update
+              :to-have-been-called))
+
+    (it "should force an command recount when idle for `auto-update-interval'"
+      (customize-set-variable 'smex-auto-update-interval 60)
+      ;; Pretend that smex is due for an update
+      (setq smex-last-update-time
+            (time-subtract (current-time) (* 60 (1+ smex-auto-update-interval))))
+      (smex-idle-update)
+      (expect 'smex-idle-update
+              :to-have-been-called)
+      (expect 'smex-update-if-needed
+              :to-have-been-called)
+      (expect 'smex-detect-new-commands
+              :to-have-been-called))
+
+    (it "should cancel the long-update timer when `auto-update-interval' is nil"
+      (customize-set-variable 'smex-auto-update-interval 60)
+      (expect smex-long-idle-update-timer
+              :to-be-truthy)
+      (customize-set-variable 'smex-auto-update-interval nil)
+      (expect smex-long-idle-update-timer
+              :not :to-be-truthy)))
 
   (describe "with `smex-save-file'"
 
@@ -345,7 +396,18 @@ equal."
 
   (describe "with `smex-prompt-string'"
 
-    (it "should use the specified prompt string"))
+    (it "should use the specified prompt string"
+      (customize-set-variable 'smex-prompt-string "Run command: ")
+      (let (observed-prompt)
+        (expect
+         (with-simulated-input
+             '((setq temp-variable (buffer-substring (point-min) (point)))
+               "ignore RET")
+           (smex-completing-read '("ignore")))
+         :to-equal "ignore")
+        (setq observed-prompt temp-variable)
+        (expect observed-prompt
+                :to-equal smex-prompt-string))))
 
   (describe "with `smex-ignored-command-matchers'"
 
