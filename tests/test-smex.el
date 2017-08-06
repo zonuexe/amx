@@ -105,6 +105,10 @@ equal."
     (expect
      (lambda ()
        (customize-set-variable 'smex-backend 'ido))
+     :to-throw)
+    (expect
+     (lambda ()
+       (customize-set-variable 'smex-backend 'ivy))
      :to-throw))
 
   (describe "standard backend"
@@ -319,7 +323,11 @@ equal."
 
   (describe "auto-update functionality"
 
-    (it "should force an update when idle for `auto-update-interval'")
+    (xit "should force an update when idle for `auto-update-interval'"
+      (customize-set-variable 'smex-auto-update-interval 60)
+      (spy-on 'smex-idle-update :and-call-through)
+      (spy-on 'smex- :and-call-through)
+      (wsi-simulate-idle-time 1))
 
     (it "should cancel the long-update timer when `auto-update-interval' is nil")
 
@@ -355,7 +363,12 @@ equal."
 
     (it "should have functioning key binds"))
 
+  ;; https://github.com/DarwinAwardWinner/smex/issues/11
+  (describe "when variables are changed after loading smex"
 
+    (it "should work after modifying `smex-save-file'")
+
+    (it "should work after modifying `smex-history-length'"))
 
   (describe "`smex-mode'"
 
