@@ -561,6 +561,9 @@ By default, an appropriate method is selected based on whether
   (setq smex-last-update-time (current-time)))
 
 (defun smex-detect-new-commands ()
+  "Return non-nil if the number of defined commands has changed.
+
+The return value is actually the new count of commands."
   (let ((i 0))
     (mapatoms (lambda (symbol) (if (commandp symbol) (setq i (1+ i)))))
     (unless (= i smex-command-count)
@@ -574,7 +577,8 @@ Otherwise, if optional arg COUNT-COMMANDS is non-nil, count the
 total number of defined commands in `obarray' and update if it
 has changed."
   (if (or (null smex-last-update-time)
-          (smex-detect-new-commands))
+          (and count-commands
+               (smex-detect-new-commands)))
       (smex-update)))
 
 ;;;###autoload
@@ -1083,7 +1087,7 @@ current."
     (smex-invalidate-keybind-hash))
   (smex-update-keybind-hash))
 
-;; This does a quick update check every time emacs is idle
+;; This does a quick update every time emacs is idle
 (setq smex-short-idle-update-timer
       (run-with-idle-timer 1 t 'smex-idle-update))
 
