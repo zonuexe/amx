@@ -367,7 +367,9 @@ equal."
       (customize-set-variable 'smex-auto-update-interval 60)
       ;; Pretend that smex is due for an update
       (setq smex-last-update-time
-            (time-subtract (current-time) (* 60 (1+ smex-auto-update-interval))))
+            (time-subtract (current-time)
+                           (seconds-to-time
+                            (* 60 (1+ smex-auto-update-interval)))))
       (smex-idle-update)
       (expect 'smex-idle-update
               :to-have-been-called)
