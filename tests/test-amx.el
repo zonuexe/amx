@@ -1,12 +1,12 @@
 ;;; -*- lexical-binding: t -*-
 
-(require 'smex)
+(require 'amx)
 (require 'buttercup)
 (require 'cl-lib)
 (require 'with-simulated-input)
 
-(unless smex-initialized
-  (smex-initialize))
+(unless amx-initialized
+  (amx-initialize))
 
 (defun test-save-custom-vars (vars)
   (cl-loop
@@ -52,7 +52,7 @@ equal."
 (defun canonicalize-key-sequence (k)
   (key-description (kbd k)))
 
-(cl-defun smex-completing-read-return-first-choice
+(cl-defun amx-completing-read-return-first-choice
     (choices &key initial-input predicate)
   (car (all-completions (or initial-input "") choices predicate)))
 
@@ -61,41 +61,41 @@ equal."
   (interactive)
   (message "Ran my-temp-command"))
 
-(describe "The smex package"
+(describe "The amx package"
 
   ;; Reset all of these variables to their standard values before each
   ;; test
   (before-each
     (test-save-custom-vars
-     '(smex-mode
-       smex-auto-update-interval
-       smex-save-file
-       smex-history-length
-       smex-show-key-bindings
-       smex-prompt-string
-       smex-ignored-command-matchers
-       smex-backend))
+     '(amx-mode
+       amx-auto-update-interval
+       amx-save-file
+       amx-history-length
+       amx-show-key-bindings
+       amx-prompt-string
+       amx-ignored-command-matchers
+       amx-backend))
     ;; Don't save anything to disk during testing
-    (setq smex-save-file nil)
-    ;; Start each test with smex caches fully updated
-    (smex-idle-update t))
+    (setq amx-save-file nil)
+    ;; Start each test with amx caches fully updated
+    (amx-idle-update t))
 
   ;; Restore the saved value after each test
   (after-each
     (test-restore-custom-vars
-     '(smex-mode
-       smex-auto-update-interval
-       smex-save-file
-       smex-history-length
-       smex-show-key-bindings
-       smex-prompt-string
-       smex-ignored-command-matchers
-       smex-backend)))
+     '(amx-mode
+       amx-auto-update-interval
+       amx-save-file
+       amx-history-length
+       amx-show-key-bindings
+       amx-prompt-string
+       amx-ignored-command-matchers
+       amx-backend)))
 
   (it "should execute the selected command"
     (spy-on 'my-temp-command)
     (with-simulated-input "my-temp-command RET"
-      (smex-read-and-run '(my-temp-command)))
+      (amx-read-and-run '(my-temp-command)))
     (expect 'my-temp-command
             :to-have-been-called))
 
@@ -104,24 +104,24 @@ equal."
     (spy-on 'require :and-return-value nil)
     (expect
      (lambda ()
-       (customize-set-variable 'smex-backend 'ido))
+       (customize-set-variable 'amx-backend 'ido))
      :to-throw)
     (expect
      (lambda ()
-       (customize-set-variable 'smex-backend 'ivy))
+       (customize-set-variable 'amx-backend 'ivy))
      :to-throw))
 
   (describe "standard backend"
 
     (before-each
-      (customize-set-variable 'smex-backend 'standard)
+      (customize-set-variable 'amx-backend 'standard)
       (spy-on 'completing-read-default :and-call-through)
       (spy-on 'completing-read :and-call-through))
 
     (it "should call `completing-read-default' and not `completing-read'"
       (expect
        (with-simulated-input "ignore RET"
-         (smex-completing-read '("ignore")))
+         (amx-completing-read '("ignore")))
        :to-equal "ignore")
       (expect 'completing-read-default
               :to-have-been-called)
@@ -131,17 +131,17 @@ equal."
   (describe "ido backend"
 
     (before-each
-      (customize-set-variable 'smex-backend 'ido)
+      (customize-set-variable 'amx-backend 'ido)
       (spy-on 'ido-completing-read+ :and-call-through))
 
     (it "should load `ido-completing-read+' when selected"
-      (customize-set-variable 'smex-backend 'ido)
+      (customize-set-variable 'amx-backend 'ido)
       (expect (featurep 'ido-completing-read+)))
 
     (it "should call `ido-completing-read+'"
       (expect
        (with-simulated-input "ignore RET"
-         (smex-completing-read '("ignore")))
+         (amx-completing-read '("ignore")))
        :to-equal "ignore")
       (expect 'ido-completing-read+
               :to-have-been-called)))
@@ -149,17 +149,17 @@ equal."
   (describe "ivy backend"
 
     (before-each
-      (customize-set-variable 'smex-backend 'ivy)
+      (customize-set-variable 'amx-backend 'ivy)
       (spy-on 'ivy-read :and-call-through))
 
     (it "should load `ivy' when selected"
-      (customize-set-variable 'smex-backend 'ivy)
+      (customize-set-variable 'amx-backend 'ivy)
       (expect (featurep 'ivy)))
 
     (it "should call `ivy-read'"
       (expect
        (with-simulated-input "ignore RET"
-         (smex-completing-read '("ignore")))
+         (amx-completing-read '("ignore")))
        :to-equal "ignore")
       (expect 'ivy-read
               :to-have-been-called)))
@@ -167,7 +167,7 @@ equal."
   (describe "auto backend"
 
     (before-each
-      (customize-set-variable 'smex-backend 'auto)
+      (customize-set-variable 'amx-backend 'auto)
       ;; Pre-load features so we can spy on their functions
       (require 'ido-completing-read+)
       (require 'ivy)
@@ -187,26 +187,26 @@ equal."
       (test-restore-custom-vars '(ido-mode ivy-mode)))
 
     (it "should normally use standard completion"
-      (smex-completing-read '("ignore"))
+      (amx-completing-read '("ignore"))
       (expect 'completing-read-default
               :to-have-been-called))
 
     (it "should use ido completion when `ido-mode' or `ido-ubiquitous-mode' are enabled"
       (ido-mode 1)
-      (smex-completing-read '("ignore"))
+      (amx-completing-read '("ignore"))
       (expect 'ido-completing-read+
               :to-have-been-called))
 
     (it "should use ivy completion when `ivy-mode' is enabled"
       (ivy-mode 1)
-      (smex-completing-read '("ignore"))
+      (amx-completing-read '("ignore"))
       (expect 'ivy-read
               :to-have-been-called)))
 
-  (describe "with `smex-show-key-bindings'"
+  (describe "with `amx-show-key-bindings'"
 
     :var (orig-local-map
-          orig-smex-completing-read
+          orig-amx-completing-read
           my-key-sequence
           temp-map
           last-choice-list)
@@ -214,27 +214,27 @@ equal."
     (before-each
       ;; Save the information needed to undo everything
       (setq orig-local-map (current-local-map)
-            orig-smex-completing-read (symbol-function 'smex-completing-read)
+            orig-amx-completing-read (symbol-function 'amx-completing-read)
             temp-map (make-sparse-keymap)
             my-key-sequence (canonicalize-key-sequence "C-M-A-H-s-a"))
       ;; Reversibly add a custom binding to the local map
       (define-key temp-map (kbd my-key-sequence) 'my-temp-command)
       (use-local-map (make-composed-keymap temp-map orig-local-map))
       ;; Ido lets us select entries using any substring
-      (customize-set-variable 'smex-backend 'ido)
-      (customize-set-variable 'smex-show-key-bindings t)
-      (spy-on 'smex-completing-read :and-call-fake
+      (customize-set-variable 'amx-backend 'ido)
+      (customize-set-variable 'amx-show-key-bindings t)
+      (spy-on 'amx-completing-read :and-call-fake
               ;; Save the choices list and then call original
               (cl-function
                (lambda (choices &key initial-input predicate)
                  (setq last-choice-list (all-completions "" choices predicate))
-                 (funcall orig-smex-completing-read choices
+                 (funcall orig-amx-completing-read choices
                           :initial-input initial-input
                           :predicate predicate))))
-      (spy-on 'smex-augment-commands-with-keybinds :and-call-through)
-      (spy-on 'smex-update-keybind-hash :and-call-through)
-      (spy-on 'smex-make-keybind-hash :and-call-through)
-      (spy-on 'smex-invalidate-keybind-hash :and-call-through)
+      (spy-on 'amx-augment-commands-with-keybinds :and-call-through)
+      (spy-on 'amx-update-keybind-hash :and-call-through)
+      (spy-on 'amx-make-keybind-hash :and-call-through)
+      (spy-on 'amx-invalidate-keybind-hash :and-call-through)
       ;; Don't actually execute selected commands
       (spy-on 'execute-extended-command))
 
@@ -246,141 +246,141 @@ equal."
       (expect
        (cl-some
         (apply-partially 's-contains? my-key-sequence)
-        (smex-augment-commands-with-keybinds '(my-temp-command)))))
+        (amx-augment-commands-with-keybinds '(my-temp-command)))))
 
     (it "should show key bindings and update the keybind hash when enabled"
       (with-simulated-input "RET"
-        (smex-read-and-run smex-cache "my-temp-command"))
+        (amx-read-and-run amx-cache "my-temp-command"))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command")
-      (expect 'smex-augment-commands-with-keybinds
+      (expect 'amx-augment-commands-with-keybinds
               :to-have-been-called)
       (expect (cl-some (apply-partially 's-contains? my-key-sequence)
                        last-choice-list)))
 
     (it "should allow completion on key bindings"
       (with-simulated-input "RET"
-        (smex-read-and-run smex-cache my-key-sequence))
+        (amx-read-and-run amx-cache my-key-sequence))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command"))
 
     (it "should not show key bindings or update the keybind hash when disabled"
-      (setq smex-show-key-bindings nil)
-      (smex-invalidate-keybind-hash)
+      (setq amx-show-key-bindings nil)
+      (amx-invalidate-keybind-hash)
       (with-simulated-input "RET"
-        (smex-read-and-run smex-cache "my-temp-command"))
+        (amx-read-and-run amx-cache "my-temp-command"))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command")
-      (expect 'smex-augment-commands-with-keybinds
+      (expect 'amx-augment-commands-with-keybinds
               :not :to-have-been-called)
-      (expect 'smex-make-keybind-hash
+      (expect 'amx-make-keybind-hash
               :not :to-have-been-called)
       (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
                             last-choice-list))))
 
     (it "should update the keybind hash after any keymap is modified"
-      (setq smex-show-key-bindings t)
+      (setq amx-show-key-bindings t)
       ;; Call `define-key'
       (define-key temp-map my-key-sequence 'my-temp-command)
-      (expect 'smex-invalidate-keybind-hash
+      (expect 'amx-invalidate-keybind-hash
               :to-have-been-called)
       (with-simulated-input "RET"
-        (smex-read-and-run smex-cache "my-temp-command"))
+        (amx-read-and-run amx-cache "my-temp-command"))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command")
-      (expect 'smex-augment-commands-with-keybinds
+      (expect 'amx-augment-commands-with-keybinds
               :to-have-been-called)
-      (expect 'smex-make-keybind-hash
+      (expect 'amx-make-keybind-hash
               :to-have-been-called))
 
-    (it "should use `smex-origin-buffer' instead of current buffer when looking up key binds"
-      (setq smex-show-key-bindings t)
+    (it "should use `amx-origin-buffer' instead of current buffer when looking up key binds"
+      (setq amx-show-key-bindings t)
       (with-temp-buffer
-        (let ((smex-origin-buffer (current-buffer)))
+        (let ((amx-origin-buffer (current-buffer)))
           ;; Now my-temp-command is not bound in active maps, so its
           ;; key binding should not show up in completions
           (with-simulated-input "RET"
-            (smex-read-and-run smex-cache "my-temp-command"))
+            (amx-read-and-run amx-cache "my-temp-command"))
           (expect 'execute-extended-command
                   :to-have-been-called-with nil "my-temp-command")
           (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
                                 last-choice-list))))))
 
     (it "should update the keybind hash after switching buffers"
-      (setq smex-show-key-bindings t)
+      (setq amx-show-key-bindings t)
       (with-temp-buffer
-        (let ((smex-origin-buffer (current-buffer)))
+        (let ((amx-origin-buffer (current-buffer)))
           (with-simulated-input "RET"
-            (smex-read-and-run smex-cache "my-temp-command"))
+            (amx-read-and-run amx-cache "my-temp-command"))
           (expect 'execute-extended-command
                   :to-have-been-called-with nil "my-temp-command")
-          (expect 'smex-augment-commands-with-keybinds
+          (expect 'amx-augment-commands-with-keybinds
                   :to-have-been-called)
-          (expect 'smex-update-keybind-hash
+          (expect 'amx-update-keybind-hash
                   :to-have-been-called)))))
 
   (describe "auto-update functionality"
 
-    :var (smex-last-update-time)
+    :var (amx-last-update-time)
 
     (before-each
-      (spy-on 'smex-idle-update :and-call-through)
-      (spy-on 'smex-update-if-needed :and-call-through)
-      (spy-on 'smex-detect-new-commands :and-call-through)
-      (spy-on 'smex-update :and-call-through))
+      (spy-on 'amx-idle-update :and-call-through)
+      (spy-on 'amx-update-if-needed :and-call-through)
+      (spy-on 'amx-detect-new-commands :and-call-through)
+      (spy-on 'amx-update :and-call-through))
 
     (it "should not force an update on the short idle timer"
       ;; Trigger a short idle update
-      (smex-idle-update)
-      (expect 'smex-idle-update
+      (amx-idle-update)
+      (expect 'amx-idle-update
               :to-have-been-called)
-      (expect 'smex-update-if-needed
+      (expect 'amx-update-if-needed
               :to-have-been-called)
-      (expect 'smex-detect-new-commands
+      (expect 'amx-detect-new-commands
               :not :to-have-been-called)
-      (expect 'smex-update
+      (expect 'amx-update
               :not :to-have-been-called))
 
     (it "should do an update on the short idle timer when needed"
-      (smex-post-eval-force-update)
+      (amx-post-eval-force-update)
       ;; No update runs yet
-      (expect 'smex-idle-update
+      (expect 'amx-idle-update
               :not :to-have-been-called)
       ;; Trigger a short idle update
-      (smex-idle-update)
-      (expect 'smex-idle-update
+      (amx-idle-update)
+      (expect 'amx-idle-update
               :to-have-been-called)
-      (expect 'smex-update-if-needed
+      (expect 'amx-update-if-needed
               :to-have-been-called)
-      (expect 'smex-detect-new-commands
+      (expect 'amx-detect-new-commands
               :not :to-have-been-called)
-      (expect 'smex-update
+      (expect 'amx-update
               :to-have-been-called))
 
     (it "should force an command recount when idle for `auto-update-interval'"
-      (customize-set-variable 'smex-auto-update-interval 60)
-      ;; Pretend that smex is due for an update
-      (setq smex-last-update-time
+      (customize-set-variable 'amx-auto-update-interval 60)
+      ;; Pretend that amx is due for an update
+      (setq amx-last-update-time
             (time-subtract (current-time)
                            (seconds-to-time
-                            (* 60 (1+ smex-auto-update-interval)))))
-      (smex-idle-update)
-      (expect 'smex-idle-update
+                            (* 60 (1+ amx-auto-update-interval)))))
+      (amx-idle-update)
+      (expect 'amx-idle-update
               :to-have-been-called)
-      (expect 'smex-update-if-needed
+      (expect 'amx-update-if-needed
               :to-have-been-called)
-      (expect 'smex-detect-new-commands
+      (expect 'amx-detect-new-commands
               :to-have-been-called))
 
     (it "should cancel the long-update timer when `auto-update-interval' is nil"
-      (customize-set-variable 'smex-auto-update-interval 60)
-      (expect smex-long-idle-update-timer
+      (customize-set-variable 'amx-auto-update-interval 60)
+      (expect amx-long-idle-update-timer
               :to-be-truthy)
-      (customize-set-variable 'smex-auto-update-interval nil)
-      (expect smex-long-idle-update-timer
+      (customize-set-variable 'amx-auto-update-interval nil)
+      (expect amx-long-idle-update-timer
               :not :to-be-truthy)))
 
-  (describe "with `smex-save-file'"
+  (describe "with `amx-save-file'"
 
     (it "should be able to save to a file")
 
@@ -388,23 +388,23 @@ equal."
 
     (it "should not fail when loading a nonexistent file")
 
-    (it "should not save when `init-file-user' or `smex-save-file' are nil"))
+    (it "should not save when `init-file-user' or `amx-save-file' are nil"))
 
-  (describe "with `smex-prompt-string'"
+  (describe "with `amx-prompt-string'"
 
     (it "should use the specified prompt string"
-      (customize-set-variable 'smex-prompt-string "Run command: ")
+      (customize-set-variable 'amx-prompt-string "Run command: ")
       (let (observed-prompt)
         (expect
          (with-simulated-input
              '((setq observed-prompt (buffer-substring (point-min) (point)))
                "ignore RET")
-           (smex-completing-read '("ignore")))
+           (amx-completing-read '("ignore")))
          :to-equal "ignore")
         (expect observed-prompt
-                :to-equal smex-prompt-string))))
+                :to-equal amx-prompt-string))))
 
-  (describe "with `smex-ignored-command-matchers'"
+  (describe "with `amx-ignored-command-matchers'"
 
     (it "should ignore commands matching a regexp")
 
@@ -414,31 +414,31 @@ equal."
 
     (it "should not offer ignored commands for completion"))
 
-  (describe "smex keybinds"
+  (describe "amx keybinds"
 
-    (it "should activate `smex-map' while running smex")
+    (it "should activate `amx-map' while running amx")
 
     (it "should have functioning key binds"))
 
-  ;; https://github.com/DarwinAwardWinner/smex/issues/11
-  (describe "when variables are changed after loading smex"
+  ;; https://github.com/DarwinAwardWinner/amx/issues/11
+  (describe "when variables are changed after loading amx"
 
-    (it "should work after modifying `smex-save-file'")
+    (it "should work after modifying `amx-save-file'")
 
-    (it "should work after modifying `smex-history-length'"))
+    (it "should work after modifying `amx-history-length'"))
 
-  (describe "`smex-mode'"
+  (describe "`amx-mode'"
 
     (before-each
-      (smex-mode 1))
+      (amx-mode 1))
 
     (it "should replace M-x when enabled"
       (expect (key-binding [remap execute-extended-command])
-              :to-be 'smex))
+              :to-be 'amx))
 
     (it "should not replace M-x when disabled"
-      (smex-mode 0)
+      (amx-mode 0)
       (expect (key-binding [remap execute-extended-command])
-              :not :to-be 'smex))))
+              :not :to-be 'amx))))
 
-;;; test-smex.el ends here
+;;; test-amx.el ends here

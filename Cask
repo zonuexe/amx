@@ -1,7 +1,7 @@
 (source gnu)
 (source melpa)
 
-(package-file "smex.el")
+(package-file "amx.el")
 
 (development
  (depends-on "ido-completing-read+")

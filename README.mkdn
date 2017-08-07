@@ -1,0 +1,4 @@
+This is a fork of smex that I'm calling amx, short for "Alternate
+M-x". It diverges significantly from smex, so it requires new
+documentation. For now, you can find the old smex README at
+README.smex.markdown.
