@@ -61,10 +61,6 @@ equal."
   (interactive)
   (message "Ran my-temp-command"))
 
-;; Need a non-lexical var to work around a scoping bug in
-;; with-simulated-input
-(defvar temp-variable)
-
 (describe "The smex package"
 
   ;; Reset all of these variables to their standard values before each
@@ -263,10 +259,8 @@ equal."
                        last-choice-list)))
 
     (it "should allow completion on key bindings"
-      ;; Needed to avoid scoping issues with macro
-      (eval
-       `(with-simulated-input "RET"
-          (smex-read-and-run smex-cache ,my-key-sequence)))
+      (with-simulated-input "RET"
+        (smex-read-and-run smex-cache my-key-sequence))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command"))
 
@@ -403,11 +397,10 @@ equal."
       (let (observed-prompt)
         (expect
          (with-simulated-input
-             '((setq temp-variable (buffer-substring (point-min) (point)))
+             '((setq observed-prompt (buffer-substring (point-min) (point)))
                "ignore RET")
            (smex-completing-read '("ignore")))
          :to-equal "ignore")
-        (setq observed-prompt temp-variable)
         (expect observed-prompt
                 :to-equal smex-prompt-string))))
 
