@@ -108,8 +108,7 @@ If nil, a `amx-update' is needed ASAP.")
   :group 'amx
   (if amx-mode
       (progn
-        (unless amx-initialized
-          (amx-initialize))
+        (amx-initialize)
         (global-set-key [remap execute-extended-command] 'amx))
     (when (eq (global-key-binding [remap execute-extended-command]) 'amx)
       (global-unset-key [remap execute-extended-command]))))
@@ -146,17 +145,29 @@ periodic updates will be performed."
                  (number :tag "Minutes"))
   :set #'amx-set-auto-update-interval)
 
+(defun amx-set-save-file (symbol value)
+  "Custom setter for `amx-backend'.
 
-;; FIXME: When setting this var, if the new value corresponds to an
-;; existing file, reinitialize amx using that file. Also wait until
-;; end of init to run smex-initialize to avoid doing double the work.
-;; Update the tests accordingly.
+Arguments are the same as in `set-default'.
+
+This function will refuse to set the backend unless it can load
+the associated feature, if any."
+  (cl-assert (eq symbol 'amx-save-file))
+  (set-default symbol value)
+  ;; Reinitialize from the new save file if it exists (but only if amx
+  ;; is already initialized, and only after amx is finished loading)
+  (when (and (bound-and-true-p amx-initialized)
+             (file-exists-p amx-save-file))
+    (eval-after-load 'amx
+      (amx-initialize t))))
+
 (defcustom amx-save-file (locate-user-emacs-file "amx-items" ".amx-items")
   "File in which the amx state is saved between Emacs sessions.
+
 Variables stored are: `amx-data', `amx-history'."
-  ;; TODO allow this to be set any time
   :type '(choice (string :tag "File name")
-                 (const :tag "Don't save" nil)))
+                 (const :tag "Don't save" nil))
+  :set #'amx-set-save-file)
 
 (defcustom amx-history-length 7
   "Number of recently executed commands to record."
@@ -223,8 +234,7 @@ or symbol."
 ;;;###autoload
 (defun amx ()
   (interactive)
-  (unless amx-initialized
-    (amx-initialize))
+  (amx-initialize)
   (if (amx-active)
       (amx-update-and-rerun)
     (amx-update-if-needed)
@@ -278,8 +288,7 @@ or symbol."
 (defun amx-major-mode-commands ()
   "Like `amx', but limited to commands that are relevant to the active major mode."
   (interactive)
-  (unless amx-initialized
-    (amx-initialize))
+  (amx-initialize)
   (let ((commands (delete-dups (append (amx-extract-commands-from-keymap (current-local-map))
                                        (amx-extract-commands-from-features major-mode)))))
     (setq commands (amx-sort-according-to-cache commands))
@@ -471,6 +480,7 @@ Arguments are the same as in `set-default'.
 
 This function will refuse to set the backend unless it can load
 the associated feature, if any."
+  (cl-assert (eq symbol 'amx-backend))
   (let* ((backend (or (plist-get amx-known-backends value)
                       (error "Unknown amx backend: %s" value)))
          (feature (amx-backend-required-feature backend)))
@@ -578,13 +588,22 @@ has changed."
     (amx-update)))
 
 ;;;###autoload
-(defun amx-initialize ()
-  (interactive)
-  (amx-load-save-file)
-  (amx-detect-new-commands)
-  (amx-rebuild-cache)
-  (add-hook 'kill-emacs-hook 'amx-save-to-file)
-  (setq amx-initialized t))
+(defun amx-initialize (&optional reinit)
+  "Ensure that amx is properly initialized.
+
+This function is normally idempotent, only having an effect the
+first time it is called, so it is safe to call it at the
+beginning of any function that expects amx to be initialized.
+However, optional arg REINIT forces the initialization needs to
+be re-run. Interactively, reinitialize when a prefix arg is
+provided."
+  (interactive "P")
+  (when (or reinit (not amx-initialized))
+    (amx-load-save-file)
+    (amx-detect-new-commands)
+    (amx-rebuild-cache)
+    (add-hook 'kill-emacs-hook 'amx-save-to-file)
+    (setq amx-initialized t)))
 
 (defsubst amx-buffer-not-empty-p ()
   "Returns non-nil if current buffer contains a non-space character."
@@ -1065,8 +1084,7 @@ sorted by frequency of use."
 Optional argument FORCE tells amx to completely rebuild all of
 its cached data, even if it believes that data is already
 current."
-  (unless amx-initialized
-    (amx-initialize))
+  (amx-initialize)
   (let ((do-recount
          (or force
              ;; If periodic updates are enabled, force a full search

@@ -5,8 +5,7 @@
 (require 'cl-lib)
 (require 'with-simulated-input)
 
-(unless amx-initialized
-  (amx-initialize))
+(amx-initialize)
 
 (defun test-save-custom-vars (vars)
   (cl-loop
@@ -478,19 +477,20 @@ equal."
             amx-history nil
             saved-amx-data amx-data
             amx-data nil)
-      (setq old-amx-save-file amx-save-file)
-      ;; Switch to a new file
-      (customize-set-variable 'amx-save-file
-                              (expand-file-name
-                               (make-temp-name "amx-items-renamed-")
-                               temporary-file-directory))
-      (expect (not (file-exists-p amx-save-file)))
-      (rename-file old-amx-save-file amx-save-file)
-      (amx-load-save-file)
-      (expect amx-history
-              :to-equal saved-amx-history)
-      (expect amx-data
-              :to-equal saved-amx-data)))
+      (let ((old-save-file amx-save-file)
+            (new-save-file (expand-file-name
+                            (make-temp-name "amx-items-renamed-")
+                            temporary-file-directory)))
+        (expect (not (file-exists-p new-save-file)))
+        (rename-file old-save-file new-save-file)
+        ;; Switch to the new file
+        (customize-set-variable 'amx-save-file new-save-file)
+        ;; Switching files should auto-initialize from the new file,
+        ;; restoring these variables
+        (expect amx-history
+                :to-equal saved-amx-history)
+        (expect amx-data
+                :to-equal saved-amx-data))))
 
   (describe "with `amx-ignored-command-matchers'"
 
