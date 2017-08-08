@@ -32,7 +32,6 @@
 
 (defvar amx-initialized nil
   "If non-nil amx is initialized.")
-(define-obsolete-variable-alias 'amx-initialized-p 'amx-initialized "4.0")
 
 (defvar amx-cache)
 (defvar amx-data)
@@ -109,7 +108,7 @@ If nil, a `amx-update' is needed ASAP.")
   :group 'amx
   (if amx-mode
       (progn
-        (unless amx-initialized-p
+        (unless amx-initialized
           (amx-initialize))
         (global-set-key [remap execute-extended-command] 'amx))
     (when (eq (global-key-binding [remap execute-extended-command]) 'amx)
@@ -147,7 +146,6 @@ periodic updates will be performed."
                  (number :tag "Minutes"))
   :set #'amx-set-auto-update-interval)
 
-(make-obsolete-variable 'amx-auto-update "Set `amx-auto-update-interval' instead." "4.0")
 
 ;; FIXME: When setting this var, if the new value corresponds to an
 ;; existing file, reinitialize amx using that file. Also wait until
@@ -190,8 +188,6 @@ completion list."
           (choice
            (regexp :tag "Regular expression")
            (function :tag "Function"))))
-
-(define-obsolete-variable-alias 'amx-flex-matching 'ido-enable-flex-matching "4.0")
 
 ;;--------------------------------------------------------------------------------
 ;; Amx Internals
@@ -237,7 +233,6 @@ or symbol."
 (defun amx-active ()
   "Return non-nil if amx is currently using the minibuffer"
   (>= amx-minibuffer-depth (minibuffer-depth)))
-(define-obsolete-function-alias 'amx-already-running 'amx-active "4.0")
 
 (defun amx-update-and-rerun ()
   (let ((new-initial-input
@@ -501,7 +496,6 @@ By default, an appropriate method is selected based on whether
           (const :tag "Standard" standard)
           (symbol :tag "Custom backend"))
   :set #'amx-set-backend)
-(define-obsolete-variable-alias 'amx-completion-method 'amx-backend "4.0")
 
 ;;--------------------------------------------------------------------------------
 ;; Cache and Maintenance
@@ -592,12 +586,6 @@ has changed."
   (add-hook 'kill-emacs-hook 'amx-save-to-file)
   (setq amx-initialized t))
 
-(define-obsolete-function-alias
-  'amx-initialize-ido 'ido-common-initialization
-  "4.0")
-
-(define-obsolete-function-alias
-  'amx-save-file-not-empty-p 'amx-buffer-not-empty-p "4.0")
 (defsubst amx-buffer-not-empty-p ()
   "Returns non-nil if current buffer contains a non-space character."
   (string-match-p "\[^[:space:]\]" (buffer-string)))
