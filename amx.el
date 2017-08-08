@@ -581,7 +581,6 @@ has changed."
 ;;;###autoload
 (defun amx-initialize ()
   (interactive)
-  (ido-common-initialization)
   (amx-load-save-file)
   (amx-detect-new-commands)
   (amx-rebuild-cache)
