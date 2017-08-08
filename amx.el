@@ -344,8 +344,8 @@ minibuffer.."
 ;; Pluggable Backends
 
 (cl-defun amx-define-backend (&key name comp-fun get-text-fun
-                                    (exit-fun 'amx-default-exit-minibuffer)
-                                    required-feature)
+                                   (exit-fun 'amx-default-exit-minibuffer)
+                                   required-feature)
   (cl-assert
    (and (symbolp name) name
         (functionp comp-fun)
@@ -357,10 +357,10 @@ minibuffer.."
    (list name comp-fun get-text-fun exit-fun))
   (let ((backend
          (make-amx-backend :name name
-                            :comp-fun comp-fun
-                            :get-text-fun get-text-fun
-                            :exit-fun exit-fun
-                            :required-feature required-feature)))
+                           :comp-fun comp-fun
+                           :get-text-fun get-text-fun
+                           :exit-fun exit-fun
+                           :required-feature required-feature)))
     (setq amx-known-backends
           (plist-put amx-known-backends name backend))))
 
@@ -676,7 +676,7 @@ has changed."
       (unless (eq command-item (car amx-cache))
         (let (command-cell
               (pos (amx-detect-position amx-cache (lambda (cell)
-                                                      (eq command-item (car cell))))))
+                                                    (eq command-item (car cell))))))
           ;; Remove the just executed command.
           (setq command-cell (amx-remove-nth-cell pos amx-cache))
           ;; And put it on top of the cache.
@@ -788,7 +788,7 @@ symbol by itself."
 This function takes any number of arguments and ignores them so
 that it can be used as advice on other functions."
   (setq amx-command-keybind-hash nil
-            amx-last-active-maps nil))
+        amx-last-active-maps nil))
 
 (defun amx-maybe-invalidate-keybind-hash ()
   "If `amx-command-keybind-hash' is stale, set it to nil.
@@ -978,8 +978,8 @@ reversing the effect of a previous `amx-ignore'. "
 (defun amx-describe-function ()
   (interactive)
   (amx-do-with-selected-item (lambda (chosen)
-                                (describe-function chosen)
-                                (pop-to-buffer "*Help*"))))
+                               (describe-function chosen)
+                               (pop-to-buffer "*Help*"))))
 
 (defun amx-where-is ()
   (interactive)
