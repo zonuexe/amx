@@ -151,16 +151,13 @@ periodic updates will be performed."
 
 (defcustom amx-save-file (locate-user-emacs-file "amx-items" ".amx-items")
   "File in which the amx state is saved between Emacs sessions.
-Variables stored are: `amx-data', `amx-history'.
-Must be set before initializing Amx."
+Variables stored are: `amx-data', `amx-history'."
   ;; TODO allow this to be set any time
   :type '(choice (string :tag "File name")
                  (const :tag "Don't save" nil)))
 
 (defcustom amx-history-length 7
-  "Determines on how many recently executed commands
-Amx should keep a record.
-Must be set before initializing Amx."
+  "Number of recently executed commands to record."
   ;; TODO allow this to be set any time
   :type 'integer)
 
@@ -598,6 +595,7 @@ has changed."
 (define-obsolete-function-alias
   'amx-save-file-not-empty-p 'amx-buffer-not-empty-p "4.0")
 (defsubst amx-buffer-not-empty-p ()
+  "Returns non-nil if current buffer contains a non-space character."
   (string-match-p "\[^[:space:]\]" (buffer-string)))
 
 (defun amx-load-save-file ()
@@ -646,11 +644,15 @@ has changed."
 
 (defun amx-save-to-file ()
   (interactive)
-  (when (and init-file-user amx-save-file)
-    (amx-save-history)
-    (with-temp-file (expand-file-name amx-save-file)
-      (amx-pp amx-history)
-      (amx-pp amx-data))))
+  ;; If `init-file-user' is nil, we are running under "emacs -Q", so
+  ;; don't save anything to disk
+  (if init-file-user
+      (when amx-save-file
+        (amx-save-history)
+        (with-temp-file (expand-file-name amx-save-file)
+          (amx-pp amx-history)
+          (amx-pp amx-data)))
+    (display-warning 'amx "Not saving amx state from \"emacs -Q\".")))
 
 ;;--------------------------------------------------------------------------------
 ;; Ranking

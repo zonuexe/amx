@@ -111,6 +111,18 @@ equal."
        (customize-set-variable 'amx-backend 'ivy))
      :to-throw))
 
+  (it "should use the prompt string specified in `amx-prompt-string'"
+    (customize-set-variable 'amx-prompt-string "Run command: ")
+    (let (observed-prompt)
+      (expect
+       (with-simulated-input
+           '((setq observed-prompt (buffer-substring (point-min) (point)))
+             "ignore RET")
+         (amx-completing-read '("ignore")))
+       :to-equal "ignore")
+      (expect observed-prompt
+              :to-match amx-prompt-string)))
+
   (describe "standard backend"
 
     (before-each
@@ -382,27 +394,103 @@ equal."
 
   (describe "with `amx-save-file'"
 
-    (it "should be able to save to a file")
+    :var (orig-temporary-file-directory
+          temporary-file-directory
+          orig-init-file-user
+          init-file-user
+          amx-temp-commands
+          saved-amx-history
+          saved-amx-data
+          old-amx-save-file)
 
-    (it "should be able to load from a file")
+    (before-each
+      ;; Pretend that we're not running under "emacs -Q" by setting
+      ;; `init-file-user' non-nil
+      (setq orig-init-file-user init-file-user
+            init-file-user (or init-file-user "nobody"))
+      ;; Set up a private temporary directory for each test
+      (setq orig-temporary-file-directory temporary-file-directory
+            temporary-file-directory (make-temp-file "amx-test-temp-" t))
+      ;; Also create some commands to store in the history, and
+      ;; pretend to run amx several times on each one to create some
+      ;; fake history.
+      (cl-loop
+       for i from 1 to 10
+       for cmdsym = (cl-gensym "amx-temp-command-")
+       do (progn
+            (setf (symbol-function cmdsym) (symbol-function 'ignore))
+            (push cmdsym amx-temp-commands)
+            ;; Run the ith command twice
+            (dotimes (x 2)
+              (amx-rank cmdsym)))))
 
-    (it "should not fail when loading a nonexistent file")
+    (after-each
+      ;; Delete the test-private temp dir
+      (delete-directory temporary-file-directory t nil)
+      (setq temporary-file-directory orig-temporary-file-directory
+            init-file-user orig-init-file-user)
+      ;; Un-define the temp commands
+      (cl-loop
+       for cmdsym in amx-temp-commands
+       do (fmakunbound cmdsym)))
 
-    (it "should not save when `init-file-user' or `amx-save-file' are nil"))
+    (it "should be able to save to and load amx data from a file"
+      (customize-set-variable 'amx-save-file (make-temp-file "amx-items-temp-"))
+      (amx-save-to-file)
+      (setq saved-amx-history amx-history
+            amx-history nil
+            saved-amx-data amx-data
+            amx-data nil)
+      (amx-load-save-file)
+      (expect amx-history
+              :to-equal saved-amx-history)
+      (expect amx-data
+              :to-equal saved-amx-data))
 
-  (describe "with `amx-prompt-string'"
+    (it "should handle trying to load a nonexistent file"
+      (customize-set-variable 'amx-save-file (make-temp-name "amx-items-temp-"))
+      (when (file-exists-p amx-save-file)
+        (delete-file amx-save-file nil))
+      (assume (not (file-exists-p amx-save-file)))
+      (expect (lambda () (amx-load-save-file))
+              :not :to-throw))
 
-    (it "should use the specified prompt string"
-      (customize-set-variable 'amx-prompt-string "Run command: ")
-      (let (observed-prompt)
-        (expect
-         (with-simulated-input
-             '((setq observed-prompt (buffer-substring (point-min) (point)))
-               "ignore RET")
-           (amx-completing-read '("ignore")))
-         :to-equal "ignore")
-        (expect observed-prompt
-                :to-equal amx-prompt-string))))
+    (it "should not save when `init-file-user' or `amx-save-file' are nil"
+      (customize-set-variable 'amx-save-file (make-temp-name "amx-items-temp-"))
+      (when (file-exists-p amx-save-file)
+        (delete-file amx-save-file nil))
+      (assume (not (file-exists-p amx-save-file)))
+      (cl-letf ((init-file-user nil)
+                ((symbol-function 'display-warning)
+                 (symbol-function 'ignore)))
+        (amx-save-to-file))
+      (let ((amx-save-file nil))
+        (amx-save-to-file))
+      (expect (not (file-exists-p amx-save-file))))
+
+    (it "should allow changing `amx-save-file' while Emacs is running"
+      (customize-set-variable 'amx-save-file
+                              (expand-file-name
+                               (make-temp-name "amx-items-temp-")
+                               temporary-file-directory))
+      (amx-save-to-file)
+      (setq saved-amx-history amx-history
+            amx-history nil
+            saved-amx-data amx-data
+            amx-data nil)
+      (setq old-amx-save-file amx-save-file)
+      ;; Switch to a new file
+      (customize-set-variable 'amx-save-file
+                              (expand-file-name
+                               (make-temp-name "amx-items-renamed-")
+                               temporary-file-directory))
+      (expect (not (file-exists-p amx-save-file)))
+      (rename-file old-amx-save-file amx-save-file)
+      (amx-load-save-file)
+      (expect amx-history
+              :to-equal saved-amx-history)
+      (expect amx-data
+              :to-equal saved-amx-data)))
 
   (describe "with `amx-ignored-command-matchers'"
 
@@ -419,13 +507,6 @@ equal."
     (it "should activate `amx-map' while running amx")
 
     (it "should have functioning key binds"))
-
-  ;; https://github.com/DarwinAwardWinner/amx/issues/11
-  (describe "when variables are changed after loading amx"
-
-    (it "should work after modifying `amx-save-file'")
-
-    (it "should work after modifying `amx-history-length'"))
 
   (describe "`amx-mode'"
 
