@@ -149,6 +149,10 @@ periodic updates will be performed."
 
 (make-obsolete-variable 'amx-auto-update "Set `amx-auto-update-interval' instead." "4.0")
 
+;; FIXME: When setting this var, if the new value corresponds to an
+;; existing file, reinitialize amx using that file. Also wait until
+;; end of init to run smex-initialize to avoid doing double the work.
+;; Update the tests accordingly.
 (defcustom amx-save-file (locate-user-emacs-file "amx-items" ".amx-items")
   "File in which the amx state is saved between Emacs sessions.
 Variables stored are: `amx-data', `amx-history'."
@@ -306,6 +310,7 @@ or symbol."
     keymap))
 
 (defun amx-prepare-ido-bindings ()
+  ;; FIXME: defvar ido vars?
   (setq ido-completion-map
         (make-composed-keymap (list amx-ido-map ido-completion-map))))
 
