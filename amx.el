@@ -342,11 +342,11 @@ minibuffer.."
   (execute-kbd-macro (kbd "RET")))
 
 (cl-defun amx-completing-read (choices &key initial-input predicate backend)
+  (when backend
+    (amx-load-backend backend))
   (let ((amx-backend (or backend amx-backend)))
     ;; Need to do this to ensure that the specified backend is
     ;; available
-    (when backend
-      (amx-set-backend 'amx-backend backend))
     (let ((amx-minibuffer-depth (1+ (minibuffer-depth)))
           (comp-fun (amx-backend-comp-fun (amx-get-backend))))
       (funcall comp-fun choices :initial-input initial-input
@@ -496,6 +496,20 @@ May not work for things like ido and ivy."
  :get-text-fun (lambda () (error "This exit function should never be called."))
  :exit-fun (lambda () (error "This get-text function should never be called.")))
 
+(defun amx-load-backend (backend)
+  "Load all required features for BACKEND."
+  (let* ((backend-name
+          (if (symbolp backend)
+              (format "the `%s' backend" backend)
+            "this backend"))
+         (backend (amx-get-backend backend))
+         (feature (amx-backend-required-feature backend)))
+    (unless (listp feature)
+      (setq feature (list feature)))
+    (cl-loop for f in feature
+             unless (require f nil 'noerror)
+             do (error "Feature `%s' is required for %s" f backend-name))))
+
 (defun amx-set-backend (symbol value)
   "Custom setter for `amx-backend'.
 
@@ -505,12 +519,8 @@ This function will refuse to set the backend unless it can load
 the associated feature, if any."
   (cl-assert (eq symbol 'amx-backend))
   (let* ((backend (or (plist-get amx-known-backends value)
-                      (error "Unknown amx backend: %s" value)))
-         (feature (amx-backend-required-feature backend)))
-    (when feature
-      (unless (require feature nil 'noerror)
-        (error "You must install %s to use the %s backend for amx"
-               feature value))))
+                      (error "Unknown amx backend: %s" value))))
+    (amx-load-backend backend))
   ;; If we got through that, then actually set the variable
   (set-default symbol value))
 
