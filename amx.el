@@ -1,8 +1,12 @@
-;;; amx.el --- M-x interface with Ido-style fuzzy matching. -*- lexical-binding: t; -*-
+;;; amx.el --- Alternative M-x with extra features. -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2014 Cornelius Mika and contributors
+;; Copyright (C) 2017 Ryan C. Thompson
 ;;
-;; Author: Cornelius Mika <cornelius.mika@gmail.com> and contributors
+;; Some Portions Copyright (C) 2009-2014 Cornelius Mika and other contributors
+;;
+;; Author: Ryan C. Thompson <rct@thompsonclan.org>
+;;         Cornelius Mika <cornelius.mika@gmail.com>
+;; Maintainer: Ryan C. Thompson <rct@thompsonclan.org>
 ;; URL: http://github.com/DarwinAwardWinner/amx/
 ;; Package-Requires: ((emacs "24.4"))
 ;; Version: 4.0
@@ -16,14 +20,11 @@
 
 ;;; Commentary:
 
-;; Quick start:
-;; run (amx-initialize)
+;; Quick start: Run `M-x amx-mode'. Enable ido-mode or ivy-mode if you
+;; like. Use M-x as normal.
 ;;
-;; Bind the following commands:
-;; amx, amx-major-mode-commands
-;;
-;; For a detailed introduction see:
-;; http://github.com/DarwinAwardWinner/amx/blob/master/README.markdown
+;; For a more details see:
+;; http://github.com/DarwinAwardWinner/amx/blob/master/README.mkdn
 
 ;;; Code:
 
@@ -146,7 +147,7 @@ periodic updates will be performed."
   :set #'amx-set-auto-update-interval)
 
 (defun amx-set-save-file (symbol value)
-  "Custom setter for `amx-backend'.
+  "Custom setter for `amx-save-file'.
 
 Arguments are the same as in `set-default'.
 
