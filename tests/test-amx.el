@@ -267,11 +267,12 @@ equal."
       (spy-on 'amx-completing-read :and-call-fake
               ;; Save the choices list and then call original
               (cl-function
-               (lambda (choices &key initial-input predicate)
+               (lambda (choices &key initial-input predicate backend)
                  (setq last-choice-list (all-completions "" choices predicate))
                  (funcall orig-amx-completing-read choices
                           :initial-input initial-input
-                          :predicate predicate))))
+                          :predicate predicate
+                          :backend backend))))
       (spy-on 'amx-augment-commands-with-keybinds :and-call-through)
       (spy-on 'amx-update-keybind-hash :and-call-through)
       (spy-on 'amx-make-keybind-hash :and-call-through)
@@ -543,11 +544,12 @@ equal."
       (spy-on 'amx-completing-read :and-call-fake
               ;; Save the choices list and then call original
               (cl-function
-               (lambda (choices &key initial-input predicate)
+               (lambda (choices &key initial-input predicate backend)
                  (setq last-choice-list (all-completions "" choices predicate))
                  (funcall orig-amx-completing-read choices
                           :initial-input initial-input
-                          :predicate predicate))))
+                          :predicate predicate
+                          :backend backend))))
       ;; Don't actually execute selected commands
       (spy-on 'execute-extended-command))
 

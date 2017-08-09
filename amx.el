@@ -338,12 +338,17 @@ know exactly which functions each one uses to exit the
 minibuffer.."
   (execute-kbd-macro (kbd "RET")))
 
-(cl-defun amx-completing-read (choices &key initial-input predicate)
-  (let ((amx-minibuffer-depth (1+ (minibuffer-depth)))
-        (comp-fun (amx-backend-comp-fun (amx-get-backend))))
-    (funcall comp-fun choices :initial-input initial-input
-             ;; Work around a bug
-             :predicate (or predicate #'identity))))
+(cl-defun amx-completing-read (choices &key initial-input predicate backend)
+  (let ((amx-backend (or backend amx-backend)))
+    ;; Need to do this to ensure that the specified backend is
+    ;; available
+    (when backend
+      (amx-set-backend 'amx-backend backend))
+    (let ((amx-minibuffer-depth (1+ (minibuffer-depth)))
+          (comp-fun (amx-backend-comp-fun (amx-get-backend))))
+      (funcall comp-fun choices :initial-input initial-input
+               ;; Work around a bug
+               :predicate (or predicate #'identity)))))
 
 (defun amx-prompt-with-prefix-arg ()
   (let ((amx-prompt-string
@@ -470,14 +475,17 @@ May not work for things like ido and ivy."
 
 (cl-defun amx-completing-read-auto (choices &key initial-input predicate)
   "Automatically select between ivy, ido, and standard completion."
-  (let ((amx-backend
+  (let ((backend
          (cond
           ((bound-and-true-p ivy-mode) 'ivy)
           ((or (bound-and-true-p ido-mode)
                (bound-and-true-p ido-ubiquitous-mode))
            'ido)
           (t 'standard))))
-    (amx-completing-read choices :initial-input initial-input :predicate predicate)))
+    (amx-completing-read choices
+                         :initial-input initial-input
+                         :predicate predicate
+                         :backend backend)))
 
 (amx-define-backend
  :name 'auto
