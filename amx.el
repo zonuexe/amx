@@ -281,7 +281,7 @@ or symbol."
          ;; Symbol
          (chosen-item
           (amx-clean-command-name
-           (amx-completing-read commands :initial-input initial-input)))
+           (amx-completing-read collection :initial-input initial-input)))
          ;; String
          (chosen-item-name (symbol-name chosen-item)))
     (cl-assert (commandp chosen-item))
