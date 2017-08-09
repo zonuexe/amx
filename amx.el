@@ -37,6 +37,7 @@
 (defvar amx-cache)
 (defvar amx-data)
 (defvar amx-history)
+(defvar amx-backend)
 (defvar smex-save-file)
 
 (defvar amx-command-count 0
@@ -498,17 +499,14 @@ May not work for things like ido and ivy."
 
 (defun amx-load-backend (backend)
   "Load all required features for BACKEND."
-  (let* ((backend-name
-          (if (symbolp backend)
-              (format "the `%s' backend" backend)
-            "this backend"))
-         (backend (amx-get-backend backend))
+  (let* ((backend (amx-get-backend backend))
          (feature (amx-backend-required-feature backend)))
     (unless (listp feature)
       (setq feature (list feature)))
     (cl-loop for f in feature
              unless (require f nil 'noerror)
-             do (error "Feature `%s' is required for %s" f backend-name))))
+             do (error "Feature `%s' is required for backend `%s'"
+                       f (amx-backend-name backend)))))
 
 (defun amx-set-backend (symbol value)
   "Custom setter for `amx-backend'.
@@ -845,7 +843,7 @@ symbol by itself."
           (puthash (format "%s (%s)" cmd (key-description kseq)) cmd bindhash))
      finally return bindhash)))
 
-(defun amx-invalidate-keybind-hash (&rest args)
+(defun amx-invalidate-keybind-hash (&rest _args)
   "Force a rebuild of `amx-command-keybind-hash'.
 
 This function takes any number of arguments and ignores them so
@@ -890,7 +888,7 @@ current set of active keymaps.e"
  for fun in '(define-key set-keymap-parent)
  do (advice-add fun :before 'amx-invalidate-keybind-hash))
 
-(defsubst amx-augment-command-with-keybind (command &optional bind-hash)
+(defun amx-augment-command-with-keybind (command &optional bind-hash)
   (let* ((cmdname (amx-get-command-name command))
          (cmdsym (intern cmdname))
          (keybind (and bind-hash (gethash cmdsym bind-hash))))
@@ -1004,8 +1002,8 @@ reversing the effect of a previous `amx-ignore'. "
     (let ((amx-temp-prompt-string "Ignore command: "))
       (amx-completing-read
        amx-cache
-       :predicate (lambda (cmd) (not (amx-command-ignored-p cmd))))))
-   (declare (advertised-calling-convention (command) nil)))
+       :predicate (lambda (cmd) (not (amx-command-ignored-p cmd)))))))
+  (declare (advertised-calling-convention (command) nil))
   (unless (listp command)
     (setq command (list command)))
   (cl-loop
@@ -1112,7 +1110,7 @@ sorted by frequency of use."
 ;;--------------------------------------------------------------------------------
 ;; Auto Update
 
-(defun amx-post-eval-force-update (&rest args)
+(defun amx-post-eval-force-update (&rest _args)
   ;; Setting this will force an update the next time Emacs is idle
   (setq amx-last-update-time nil))
 
