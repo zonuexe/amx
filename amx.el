@@ -153,13 +153,18 @@ Arguments are the same as in `set-default'.
 This function will refuse to set the backend unless it can load
 the associated feature, if any."
   (cl-assert (eq symbol 'amx-save-file))
-  (set-default symbol value)
-  ;; Reinitialize from the new save file if it exists (but only if amx
-  ;; is already initialized, and only after amx is finished loading)
-  (when (and (bound-and-true-p amx-initialized)
-             (file-exists-p amx-save-file))
-    (eval-after-load 'amx
-      (amx-initialize t))))
+  (let ((old-value (when (boundp symbol) (symbol-value symbol))))
+    (set-default symbol value)
+    (if (file-exists-p value)
+        ;; If the new save file already exists, reinitialize from it
+        ;; (but only if amx is already initialized).
+        (when (bound-and-true-p amx-initialized)
+          (eval-after-load 'amx
+            (amx-initialize t)))
+      ;; If the new save file doesn't exist but the old one does, copy
+      ;; the old file to the new location.
+      (when (and old-value (file-exists-p old-value))
+        (copy-file old-value value)))))
 
 (defcustom amx-save-file (locate-user-emacs-file "amx-items" ".amx-items")
   "File in which the amx state is saved between Emacs sessions.

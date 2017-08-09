@@ -409,29 +409,13 @@ equal."
             init-file-user (or init-file-user "nobody"))
       ;; Set up a private temporary directory for each test
       (setq orig-temporary-file-directory temporary-file-directory
-            temporary-file-directory (make-temp-file "amx-test-temp-" t))
-      ;; Also create some commands to store in the history, and
-      ;; pretend to run amx several times on each one to create some
-      ;; fake history.
-      (cl-loop
-       for i from 1 to 10
-       for cmdsym = (cl-gensym "amx-temp-command-")
-       do (progn
-            (setf (symbol-function cmdsym) (symbol-function 'ignore))
-            (push cmdsym amx-temp-commands)
-            ;; Run the ith command twice
-            (dotimes (x 2)
-              (amx-rank cmdsym)))))
+            temporary-file-directory (make-temp-file "amx-test-temp-" t)))
 
     (after-each
       ;; Delete the test-private temp dir
       (delete-directory temporary-file-directory t nil)
       (setq temporary-file-directory orig-temporary-file-directory
-            init-file-user orig-init-file-user)
-      ;; Un-define the temp commands
-      (cl-loop
-       for cmdsym in amx-temp-commands
-       do (fmakunbound cmdsym)))
+            init-file-user orig-init-file-user))
 
     (it "should be able to save to and load amx data from a file"
       (customize-set-variable 'amx-save-file (make-temp-file "amx-items-temp-"))
@@ -467,30 +451,48 @@ equal."
         (amx-save-to-file))
       (expect (not (file-exists-p amx-save-file))))
 
-    (it "should allow changing `amx-save-file' while Emacs is running"
-      (customize-set-variable 'amx-save-file
-                              (expand-file-name
-                               (make-temp-name "amx-items-temp-")
-                               temporary-file-directory))
-      (amx-save-to-file)
-      (setq saved-amx-history amx-history
-            amx-history nil
-            saved-amx-data amx-data
-            amx-data nil)
-      (let ((old-save-file amx-save-file)
-            (new-save-file (expand-file-name
-                            (make-temp-name "amx-items-renamed-")
-                            temporary-file-directory)))
-        (expect (not (file-exists-p new-save-file)))
-        (rename-file old-save-file new-save-file)
-        ;; Switch to the new file
-        (customize-set-variable 'amx-save-file new-save-file)
-        ;; Switching files should auto-initialize from the new file,
-        ;; restoring these variables
-        (expect amx-history
-                :to-equal saved-amx-history)
-        (expect amx-data
-                :to-equal saved-amx-data))))
+    (describe "changing while Emacs is running"
+
+      (it "should copy the old save file if the new one doesn't exist already"
+        (customize-set-variable 'amx-save-file
+                                (expand-file-name
+                                 (make-temp-name "amx-items-temp-")
+                                 temporary-file-directory))
+        (amx-save-to-file)
+        (expect (file-exists-p amx-save-file))
+        (let ((old-save-file amx-save-file)
+              (new-save-file (expand-file-name
+                              (make-temp-name "amx-items-renamed-")
+                              temporary-file-directory)))
+          (expect (not (file-exists-p new-save-file)))
+          ;; Switch to the new file
+          (customize-set-variable 'amx-save-file new-save-file)
+          (expect (file-exists-p new-save-file))))
+
+      (it "should reinitialize Amx from an already existing save file"
+        (customize-set-variable 'amx-save-file
+                                (expand-file-name
+                                 (make-temp-name "amx-items-temp-")
+                                 temporary-file-directory))
+        (amx-save-to-file)
+        (setq saved-amx-history amx-history
+              amx-history nil
+              saved-amx-data amx-data
+              amx-data nil)
+        (let ((old-save-file amx-save-file)
+              (new-save-file (expand-file-name
+                              (make-temp-name "amx-items-renamed-")
+                              temporary-file-directory)))
+          (expect (not (file-exists-p new-save-file)))
+          (rename-file old-save-file new-save-file)
+          ;; Switch to the new file
+          (customize-set-variable 'amx-save-file new-save-file)
+          ;; Switching files should auto-initialize from the new file,
+          ;; restoring these variables
+          (expect amx-history
+                  :to-equal saved-amx-history)
+          (expect amx-data
+                  :to-equal saved-amx-data)))))
 
   (describe "with `amx-ignored-command-matchers'"
 
