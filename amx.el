@@ -199,7 +199,12 @@ Variables stored are: `amx-data', `amx-history'."
 Each element is either a regular expression or a function of one
 argument. Commands that match any of the regexps or return
 non-nil for any of these functions will be hidden from the amx
-completion list."
+completion list (but will still be accessible by typing in their
+exact name).
+
+Note that if you want an exact match, the Elisp regular
+expression anchors for start and end of string are \"\\`\" and
+\"\\'\", respectively."
   :type '(repeat
           (choice
            (regexp :tag "Regular expression")

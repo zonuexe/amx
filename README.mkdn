@@ -86,6 +86,16 @@ default path is `~/.emacs.d/amx-items`; you can change it by
 customizing the variable `amx-save-file`. Unlike Smex, it should be
 safe to change the save file after loading Amx.
 
+### Ignoring commands
+
+Certain commands are not very useful to run via `M-x`. These include
+commands that only have an effect when bound to certain keys (e.g.
+`self-insert-command`), commands that are marked obsolete, and
+commands meant for mouse interaction. Amx will not present these
+commands in the list of completions, but just in case, it will still
+let you enter them if you know their name. You can tell Amx to ignore
+additional commands by customizing `amx-ignored-command-matchers`.
+
 ## Running the tests
 
 Amx comes with a test suite. If you want to run it yourself, first
