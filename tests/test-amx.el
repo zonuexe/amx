@@ -509,13 +509,56 @@ equal."
 
   (describe "with `amx-ignored-command-matchers'"
 
-    (it "should ignore commands matching a regexp")
+    :var (orig-amx-completing-read
+          last-choice-list)
 
-    (it "should ignore commands matching a function")
+    (before-each
+      ;; Wrapper that saves the choice list
+      (setq orig-amx-completing-read (symbol-function 'amx-completing-read))
+      (spy-on 'amx-completing-read :and-call-fake
+              ;; Save the choices list and then call original
+              (cl-function
+               (lambda (choices &key initial-input predicate)
+                 (setq last-choice-list (all-completions "" choices predicate))
+                 (funcall orig-amx-completing-read choices
+                          :initial-input initial-input
+                          :predicate predicate))))
+      ;; Don't actually execute selected commands
+      (spy-on 'execute-extended-command))
 
-    (it "should still allow executing ignored commands")
+    (it "should ignore commands matching a regexp"
+      (add-to-list 'amx-ignored-command-matchers
+                   "\\`my-temp-command-2\\'")
+      (with-simulated-input "my-temp-command RET"
+        (amx-read-and-run '(my-temp-command my-temp-command-2)))
+      (expect last-choice-list
+              :not :to-contain "my-temp-command-2"))
 
-    (it "should not offer ignored commands for completion"))
+    (it "should ignore commands matching a function"
+      (add-to-list 'amx-ignored-command-matchers
+                   (lambda (cmd) (string= "my-temp-command-2" (format "%s" cmd))))
+      (with-simulated-input "my-temp-command RET"
+        (amx-read-and-run '(my-temp-command my-temp-command-2)))
+      (expect last-choice-list
+              :not :to-contain "my-temp-command-2"))
+
+    (it "should ignore commands explicitly marked as ignored by `amx-ignore-command'"
+      (unwind-protect
+          (progn
+            (amx-ignore-command "my-temp-command-2")
+            (with-simulated-input "my-temp-command RET"
+              (amx-read-and-run '(my-temp-command my-temp-command-2)))
+            (expect last-choice-list
+                    :not :to-contain "my-temp-command-2"))
+        (amx-unignore-command "my-temp-command-2")))
+
+    (it "should still allow executing ignored commands"
+      (add-to-list 'amx-ignored-command-matchers
+                   "\\`my-temp-command-2\\'")
+      (with-simulated-input "my-temp-command-2 RET"
+        (amx-read-and-run '(my-temp-command my-temp-command-2)))
+      (expect 'execute-extended-command
+              :to-have-been-called-with nil "my-temp-command-2")))
 
   (describe "amx keybinds"
 
