@@ -5,6 +5,10 @@
 (require 'cl-lib)
 (require 'with-simulated-input)
 
+;; Need to load these to ensure certian functions are not autoloads
+(require 'help-fns)
+(require 'find-func)
+
 (amx-initialize)
 
 (defun test-save-custom-vars (vars)
@@ -125,6 +129,27 @@ equal."
        :to-equal "ignore")
       (expect observed-prompt
               :to-match amx-prompt-string)))
+
+  (it "should activate `amx-map' while running amx"
+
+    (spy-on 'describe-function)
+    (spy-on 'pop-to-buffer)
+    (spy-on 'where-is)
+    (spy-on 'find-function)
+    ;; Suppress messages
+    (spy-on 'message)
+    (with-simulated-input "my-temp-command C-h f"
+      (amx-read-and-run '(my-temp-command)))
+    (expect 'describe-function
+            :to-have-been-called)
+    (with-simulated-input "my-temp-command C-h w"
+      (amx-read-and-run '(my-temp-command)))
+    (expect 'where-is
+            :to-have-been-called)
+    (with-simulated-input "my-temp-command M-."
+      (amx-read-and-run '(my-temp-command)))
+    (expect 'find-function
+            :to-have-been-called))
 
   (describe "standard backend"
 
@@ -559,12 +584,6 @@ equal."
         (amx-read-and-run '(my-temp-command my-temp-command-2)))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command-2")))
-
-  (describe "amx keybinds"
-
-    (it "should activate `amx-map' while running amx")
-
-    (it "should have functioning key binds"))
 
   (describe "`amx-mode'"
 
