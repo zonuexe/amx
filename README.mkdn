@@ -29,6 +29,12 @@ If you want to use the
 or [ivy](https://github.com/abo-abo/swiper/) backends, you'll need to
 install the linked packages as well.
 
+Since Amx is a fork of Smex, it is probably not a good idea to have
+both installed at onace. I recommend you uninstall Smex before
+installing Amx. In addition, if you have Smex installed, you can carry
+over your Smex history to Amx by copying your `smex-items` file (see
+`smex-save-file`) to `amx-itms` (see `amx-save-file`).
+
 ## Usage
 
 To replace regular `M-x` with Amx, use `M-x amx-mode`. This will remap
