@@ -55,10 +55,14 @@ equal."
     (choices &key initial-input predicate)
   (car (all-completions (or initial-input "") choices predicate)))
 
-;; Create a command with a known name and key binding
+;; Create some commands with a known names
 (defun my-temp-command ()
   (interactive)
   (message "Ran my-temp-command"))
+
+(defun my-temp-command-2 ()
+  (interactive)
+  (message "Ran my-temp-command-2"))
 
 (describe "The amx package"
 
@@ -234,6 +238,7 @@ equal."
       ;; Ido lets us select entries using any substring
       (customize-set-variable 'amx-backend 'ido)
       (customize-set-variable 'amx-show-key-bindings t)
+      ;; Wrapper that saves the choice list
       (spy-on 'amx-completing-read :and-call-fake
               ;; Save the choices list and then call original
               (cl-function
@@ -272,6 +277,14 @@ equal."
     (it "should allow completion on key bindings"
       (with-simulated-input "RET"
         (amx-read-and-run amx-cache my-key-sequence))
+      (expect 'execute-extended-command
+              :to-have-been-called-with nil "my-temp-command"))
+
+    (it "should still consider the command without its binding as a match"
+      (customize-set-variable 'amx-backend 'standard)
+      ;; Should fail with incomplete completion
+      (with-simulated-input "my-temp-command TAB RET"
+        (amx-read-and-run amx-cache))
       (expect 'execute-extended-command
               :to-have-been-called-with nil "my-temp-command"))
 

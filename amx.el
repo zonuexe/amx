@@ -261,7 +261,9 @@ or symbol."
          (commands
           ;; Add key bindings to completions
           (if amx-show-key-bindings
-              (amx-augment-commands-with-keybinds commands)
+              (completion-table-in-turn
+               (amx-augment-commands-with-keybinds commands)
+               commands)
             commands))
          (collection
           ;; Initially complete with only non-ignored commands, but if
@@ -880,7 +882,7 @@ In the returned list, each element will be a string."
    collect (amx-augment-command-with-keybind cmd bind-hash)))
 
 (defun amx-clean-command-name (command-name)
-  "Inverse of `amx-augment-commands-with-keybinds', approximately.
+  "Inverse of `amx-augment-commands-with-keybind', approximately.
 
 Given a string starting with a command name and possibly ending
 with a key binding, it returns just the command name as a
@@ -912,7 +914,7 @@ See `amx-ignored-command-matchers'."
   ;; Command might be a string like "CMD (KEY)", requiring a lookup of
   ;; the real command name
   (when (stringp command)
-    (setq command (gethash command amx-command-keybind-hash (intern command))))
+    (setq command (amx-clean-command-name command)))
   (cl-loop
    with matched = nil
    for matcher in amx-ignored-command-matchers
