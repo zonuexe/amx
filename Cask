@@ -6,6 +6,7 @@
 (development
  (depends-on "ido-completing-read+")
  (depends-on "ivy")
+ (depends-on "smex")
  (depends-on "with-simulated-input"
              :git "https://github.com/DarwinAwardWinner/with-simulated-input.git"
              :files ("*.el"))

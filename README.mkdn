@@ -9,10 +9,10 @@ systems for selecting commands, such as
 and [ivy](https://github.com/abo-abo/swiper/).
 
 Amx is a fork of [Smex](https://github.com/nonsequitur/smex), which
-appears abandoned. However, Amx has diverged significantly from Smex
-and should be considered a separate package. Since the last tagged
-release of Smex was version 3.0, the first release version of Amx will
-be 4.0.
+appears to no longer be under active development. However, Amx has
+diverged significantly from Smex and should be considered a separate
+package. Since the last tagged release of Smex was version 3.0, the
+first release version of Amx will be 4.0.
 
 ## Installation
 
@@ -27,13 +27,13 @@ emacs `load-path`. Then run `M-x load-library amx` to load it, or put
 If you want to use the
 [ido](https://github.com/DarwinAwardWinner/ido-completing-read-plus)
 or [ivy](https://github.com/abo-abo/swiper/) backends, you'll need to
-install the linked packages as well.
+install the linked packages as well. If you already have these
+installed and enabled, Amx should use them automatically.
 
-Since Amx is a fork of Smex, it is probably not a good idea to have
-both installed at onace. I recommend you uninstall Smex before
-installing Amx. In addition, if you have Smex installed, you can carry
-over your Smex history to Amx by copying your `smex-items` file (see
-`smex-save-file`) to `amx-itms` (see `amx-save-file`).
+Since Amx is a fork of Smex, it retains compatibility with the format
+of `smex-save-file`. If you are migrating from smex to Amx, Amx will
+automatically load your smex saved history the first time it is used,
+so all your frequently-used commands will still be sorted at the top.
 
 ## Usage
 
@@ -91,6 +91,11 @@ Amx keeps a file to save its state betweens Emacs sessions. The
 default path is `~/.emacs.d/amx-items`; you can change it by
 customizing the variable `amx-save-file`. Unlike Smex, it should be
 safe to change the save file after loading Amx.
+
+If `amx-save-file` does not exist but `smex-save-file` is defined and
+does exist, Amx will load its state from that file instead. This
+facilitates migrating from Smex to Amx while retaining all of your
+saved command history.
 
 ### Ignoring commands
 

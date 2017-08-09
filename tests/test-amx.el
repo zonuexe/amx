@@ -1,15 +1,15 @@
 ;;; -*- lexical-binding: t -*-
 
+(require 'smex)
 (require 'amx)
 (require 'buttercup)
 (require 'cl-lib)
 (require 'with-simulated-input)
-
 ;; Need to load these to ensure certian functions are not autoloads
 (require 'help-fns)
 (require 'find-func)
 
-(amx-initialize)
+(smex-initialize)
 
 (defun test-save-custom-vars (vars)
   (cl-loop
@@ -83,7 +83,8 @@ equal."
        amx-show-key-bindings
        amx-prompt-string
        amx-ignored-command-matchers
-       amx-backend))
+       amx-backend
+       smex-save-file))
     ;; Don't save anything to disk during testing
     (setq amx-save-file nil)
     ;; Start each test with amx caches fully updated
@@ -99,7 +100,8 @@ equal."
        amx-show-key-bindings
        amx-prompt-string
        amx-ignored-command-matchers
-       amx-backend)))
+       amx-backend
+       smex-save-file)))
 
   (it "should execute the selected command"
     (spy-on 'my-temp-command)
@@ -470,7 +472,11 @@ equal."
               :to-equal saved-amx-data))
 
     (it "should handle trying to load a nonexistent file"
-      (customize-set-variable 'amx-save-file (make-temp-name "amx-items-temp-"))
+      (customize-set-variable
+       'amx-save-file
+       (make-temp-name (expand-file-name
+                        "amx-items-temp-"
+                        temporary-file-directory)))
       (when (file-exists-p amx-save-file)
         (delete-file amx-save-file nil))
       (assume (not (file-exists-p amx-save-file)))
@@ -478,41 +484,73 @@ equal."
               :not :to-throw))
 
     (it "should not save when `init-file-user' or `amx-save-file' are nil"
-      (customize-set-variable 'amx-save-file (make-temp-name "amx-items-temp-"))
-      (when (file-exists-p amx-save-file)
-        (delete-file amx-save-file nil))
+     (customize-set-variable
+      'amx-save-file
+      (make-temp-name
+       (expand-file-name "amx-items-temp-"
+                         temporary-file-directory)))
+     (when (file-exists-p amx-save-file)
+       (delete-file amx-save-file nil))
+     (assume (not (file-exists-p amx-save-file)))
+     (cl-letf ((init-file-user nil)
+               ((symbol-function 'display-warning)
+                (symbol-function 'ignore)))
+       (amx-save-to-file))
+     (let ((amx-save-file nil))
+       (amx-save-to-file))
+     (expect (not (file-exists-p amx-save-file))))
+
+    (it "should load from `smex-save-file' if `amx-save-file' does not exist"
+      (customize-set-variable
+       'amx-save-file
+       (make-temp-name
+        (expand-file-name "amx-items-temp-"
+                          temporary-file-directory)))
+      (customize-set-variable
+       'smex-save-file
+       (make-temp-name
+        (expand-file-name "smex-items-temp-"
+                          temporary-file-directory)))
+      ;; Save data to smex save file
+      (let ((amx-save-file smex-save-file))
+        (amx-save-to-file))
+      (setq saved-amx-history amx-history
+            amx-history nil
+            saved-amx-data amx-data
+            amx-data nil)
       (assume (not (file-exists-p amx-save-file)))
-      (cl-letf ((init-file-user nil)
-                ((symbol-function 'display-warning)
-                 (symbol-function 'ignore)))
-        (amx-save-to-file))
-      (let ((amx-save-file nil))
-        (amx-save-to-file))
-      (expect (not (file-exists-p amx-save-file))))
+      ;; Should load from smex save file
+      (amx-load-save-file)
+      (expect amx-history
+              :to-equal saved-amx-history)
+      (expect amx-data
+              :to-equal saved-amx-data))
 
     (describe "changing while Emacs is running"
 
       (it "should copy the old save file if the new one doesn't exist already"
-        (customize-set-variable 'amx-save-file
-                                (expand-file-name
-                                 (make-temp-name "amx-items-temp-")
-                                 temporary-file-directory))
+        (customize-set-variable
+         'amx-save-file
+         (make-temp-name
+          (expand-file-name "amx-items-temp-"
+                            temporary-file-directory)))
         (amx-save-to-file)
         (expect (file-exists-p amx-save-file))
         (let ((old-save-file amx-save-file)
-              (new-save-file (expand-file-name
-                              (make-temp-name "amx-items-renamed-")
-                              temporary-file-directory)))
+              (new-save-file (make-temp-name
+                              (expand-file-name "amx-items-renamed-"
+                                                temporary-file-directory))))
           (expect (not (file-exists-p new-save-file)))
           ;; Switch to the new file
           (customize-set-variable 'amx-save-file new-save-file)
           (expect (file-exists-p new-save-file))))
 
       (it "should reinitialize Amx from an already existing save file"
-        (customize-set-variable 'amx-save-file
-                                (expand-file-name
-                                 (make-temp-name "amx-items-temp-")
-                                 temporary-file-directory))
+        (customize-set-variable
+         'amx-save-file
+         (make-temp-name
+          (expand-file-name "amx-items-temp-"
+                            temporary-file-directory)))
         (amx-save-to-file)
         (setq saved-amx-history amx-history
               amx-history nil
@@ -520,7 +558,9 @@ equal."
               amx-data nil)
         (let ((old-save-file amx-save-file)
               (new-save-file (expand-file-name
-                              (make-temp-name "amx-items-renamed-")
+                              (make-temp-name
+                               (expand-file-name "amx-items-renamed-"
+                                                 temporary-file-directory))
                               temporary-file-directory)))
           (expect (not (file-exists-p new-save-file)))
           (rename-file old-save-file new-save-file)

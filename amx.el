@@ -37,6 +37,7 @@
 (defvar amx-cache)
 (defvar amx-data)
 (defvar amx-history)
+(defvar smex-save-file)
 
 (defvar amx-command-count 0
   "Number of commands known to amx.")
@@ -631,21 +632,32 @@ provided."
   (string-match-p "\[^[:space:]\]" (buffer-string)))
 
 (defun amx-load-save-file ()
-  "Loads `amx-history' and `amx-data' from `amx-save-file'"
+  "Loads `amx-history' and `amx-data' from `amx-save-file'.
+
+In order to facilitate migrating from smex, if `amx-save-file'
+does not exist, but smex is loaded and `smex-save-file' exists,
+copy `smex-save-file' to `amx-save-file' and load it."
   (setq amx-history nil amx-data nil)
   (when amx-save-file
-    (let ((save-file (expand-file-name amx-save-file)))
-      (when (file-readable-p save-file)
-        (with-temp-buffer
-          (insert-file-contents save-file)
-          (condition-case nil
-              (setq amx-history (read (current-buffer))
-                    amx-data    (read (current-buffer)))
-            (error (if (amx-buffer-not-empty-p)
-                       (error "Invalid data in amx-save-file (%s). Can't restore history."
-                              amx-save-file)
-                     (unless (boundp 'amx-history) (setq amx-history nil))
-                     (unless (boundp 'amx-data)    (setq amx-data nil))))))))))
+    (let ((amx-save-file
+           (if (and (not (file-exists-p amx-save-file))
+                    (bound-and-true-p smex-save-file)
+                    (file-exists-p smex-save-file))
+               (prog1 smex-save-file
+                 (message "Amx is loading your saved data from smex."))
+             amx-save-file)))
+      (let ((save-file (expand-file-name amx-save-file)))
+        (when (file-readable-p save-file)
+          (with-temp-buffer
+            (insert-file-contents save-file)
+            (condition-case nil
+                (setq amx-history (read (current-buffer))
+                      amx-data    (read (current-buffer)))
+              (error (if (amx-buffer-not-empty-p)
+                         (error "Invalid data in amx-save-file (%s). Can't restore history."
+                                amx-save-file)
+                       (unless (boundp 'amx-history) (setq amx-history nil))
+                       (unless (boundp 'amx-data)    (setq amx-data nil)))))))))))
 
 (defun amx-save-history ()
   "Updates `amx-history'"
