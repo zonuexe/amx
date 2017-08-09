@@ -73,6 +73,8 @@ equal."
   ;; Reset all of these variables to their standard values before each
   ;; test
   (before-each
+    ;; Suppress messages
+    (spy-on 'message)
     (test-save-custom-vars
      '(amx-mode
        amx-auto-update-interval
@@ -136,8 +138,6 @@ equal."
     (spy-on 'pop-to-buffer)
     (spy-on 'where-is)
     (spy-on 'find-function)
-    ;; Suppress messages
-    (spy-on 'message)
     (with-simulated-input "my-temp-command C-h f"
       (amx-read-and-run '(my-temp-command)))
     (expect 'describe-function
