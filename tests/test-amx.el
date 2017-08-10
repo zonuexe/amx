@@ -70,6 +70,20 @@ equal."
 
 (describe "The amx package"
 
+  :var (last-choice-list
+        orig-amx-completing-read)
+  (before-all
+    ;; Wrapper that saves the choice list
+    (setq orig-amx-completing-read (symbol-function 'amx-completing-read))
+    (spy-on 'amx-completing-read :and-call-fake
+            ;; Save the choices list and then call original
+            (cl-function
+             (lambda (choices &rest morekeys &key predicate &allow-other-keys)
+               (setq last-choice-list (all-completions "" choices predicate))
+               (apply orig-amx-completing-read choices
+                      :predicate predicate
+                      morekeys)))))
+
   ;; Reset all of these variables to their standard values before each
   ;; test
   (before-each
@@ -250,13 +264,11 @@ equal."
     :var (orig-local-map
           orig-amx-completing-read
           my-key-sequence
-          temp-map
-          last-choice-list)
+          temp-map)
 
     (before-each
       ;; Save the information needed to undo everything
       (setq orig-local-map (current-local-map)
-            orig-amx-completing-read (symbol-function 'amx-completing-read)
             temp-map (make-sparse-keymap)
             my-key-sequence (canonicalize-key-sequence "C-M-A-H-s-a"))
       ;; Reversibly add a custom binding to the local map
@@ -265,20 +277,8 @@ equal."
       ;; Ido lets us select entries using any substring
       (customize-set-variable 'amx-backend 'ido)
       (customize-set-variable 'amx-show-key-bindings t)
-      ;; Wrapper that saves the choice list
-      (spy-on 'amx-completing-read :and-call-fake
-              ;; Save the choices list and then call original
-              (cl-function
-               (lambda (choices &key initial-input predicate backend)
-                 (setq last-choice-list (all-completions "" choices predicate))
-                 (funcall orig-amx-completing-read choices
-                          :initial-input initial-input
-                          :predicate predicate
-                          :backend backend))))
       (spy-on 'amx-augment-commands-with-keybinds :and-call-through)
-      (spy-on 'amx-get-keybind-hash :and-call-through)
       (spy-on 'amx-make-keybind-hash :and-call-through)
-      (spy-on 'amx-invalidate-keybind-hash :and-call-through)
       ;; Don't actually execute selected commands
       (spy-on 'execute-extended-command))
 
@@ -290,7 +290,7 @@ equal."
       (expect
        (cl-some
         (apply-partially 's-contains? my-key-sequence)
-        (amx-augment-commands-with-keybinds '(my-temp-command)))))
+        (amx-augment-commands-with-keybinds '(my-temp-command) (amx-make-keybind-hash)))))
 
     (it "should show key bindings and update the keybind hash when enabled"
       (with-simulated-input "RET"
@@ -318,7 +318,6 @@ equal."
 
     (it "should not show key bindings or update the keybind hash when disabled"
       (setq amx-show-key-bindings nil)
-      (amx-invalidate-keybind-hash)
       (with-simulated-input "RET"
         (amx-read-and-run amx-cache "my-temp-command"))
       (expect 'execute-extended-command
@@ -329,21 +328,6 @@ equal."
               :not :to-have-been-called)
       (expect (not (cl-some (apply-partially 's-contains? my-key-sequence)
                             last-choice-list))))
-
-    (it "should update the keybind hash after any keymap is modified"
-      (setq amx-show-key-bindings t)
-      ;; Call `define-key'
-      (define-key temp-map my-key-sequence 'my-temp-command)
-      (expect 'amx-invalidate-keybind-hash
-              :to-have-been-called)
-      (with-simulated-input "RET"
-        (amx-read-and-run amx-cache "my-temp-command"))
-      (expect 'execute-extended-command
-              :to-have-been-called-with nil "my-temp-command")
-      (expect 'amx-augment-commands-with-keybinds
-              :to-have-been-called)
-      (expect 'amx-make-keybind-hash
-              :to-have-been-called))
 
     (it "should use `amx-origin-buffer' instead of current buffer when looking up key binds"
       (setq amx-show-key-bindings t)
@@ -367,8 +351,6 @@ equal."
           (expect 'execute-extended-command
                   :to-have-been-called-with nil "my-temp-command")
           (expect 'amx-augment-commands-with-keybinds
-                  :to-have-been-called)
-          (expect 'amx-get-keybind-hash
                   :to-have-been-called)))))
 
   (describe "auto-update functionality"
@@ -484,21 +466,21 @@ equal."
               :not :to-throw))
 
     (it "should not save when `init-file-user' or `amx-save-file' are nil"
-     (customize-set-variable
-      'amx-save-file
-      (make-temp-name
-       (expand-file-name "amx-items-temp-"
-                         temporary-file-directory)))
-     (when (file-exists-p amx-save-file)
-       (delete-file amx-save-file nil))
-     (assume (not (file-exists-p amx-save-file)))
-     (cl-letf ((init-file-user nil)
-               ((symbol-function 'display-warning)
-                (symbol-function 'ignore)))
-       (amx-save-to-file))
-     (let ((amx-save-file nil))
-       (amx-save-to-file))
-     (expect (not (file-exists-p amx-save-file))))
+      (customize-set-variable
+       'amx-save-file
+       (make-temp-name
+        (expand-file-name "amx-items-temp-"
+                          temporary-file-directory)))
+      (when (file-exists-p amx-save-file)
+        (delete-file amx-save-file nil))
+      (assume (not (file-exists-p amx-save-file)))
+      (cl-letf ((init-file-user nil)
+                ((symbol-function 'display-warning)
+                 (symbol-function 'ignore)))
+        (amx-save-to-file))
+      (let ((amx-save-file nil))
+        (amx-save-to-file))
+      (expect (not (file-exists-p amx-save-file))))
 
     (it "should load from `smex-save-file' if `amx-save-file' does not exist"
       (customize-set-variable
@@ -575,21 +557,7 @@ equal."
 
   (describe "with `amx-ignored-command-matchers'"
 
-    :var (orig-amx-completing-read
-          last-choice-list)
-
     (before-each
-      ;; Wrapper that saves the choice list
-      (setq orig-amx-completing-read (symbol-function 'amx-completing-read))
-      (spy-on 'amx-completing-read :and-call-fake
-              ;; Save the choices list and then call original
-              (cl-function
-               (lambda (choices &key initial-input predicate backend)
-                 (setq last-choice-list (all-completions "" choices predicate))
-                 (funcall orig-amx-completing-read choices
-                          :initial-input initial-input
-                          :predicate predicate
-                          :backend backend))))
       ;; Don't actually execute selected commands
       (spy-on 'execute-extended-command))
 

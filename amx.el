@@ -49,18 +49,10 @@
 (defvar amx-minibuffer-depth -1
   "Used to determin if amx \"owns\" the current active minibuffer.")
 
-(defvar amx-command-keybind-hash nil
+(defvar amx-command-keybind-hash (make-hash-table :size 0)
   "Hash table for translating between commands and key bindings.
 
 See `amx-make-keybind-hash'.")
-
-(defvar amx-last-active-maps nil
-  "List of keymaps last used to update `amx-command-keybind-hash'.
-
-When `amx-command-keybind-hash' is updated, this is set to the
-value of `(current-active-maps)' at that time. This is used to
-figure out whether to invalidate the hash table for the next call
-to amx.")
 
 (defvar amx-origin-buffer nil
   "The buffer amx was called from.
@@ -125,7 +117,8 @@ Debug info is printed to the *Messages* buffer."
 
 (defsubst amx--debug-message (format-string &rest args)
   (when amx-debug-mode
-    (apply #'message (concat "amx: " format-string) args)))
+    (apply #'message (concat "amx (%s): " format-string)
+           (format-time-string "%FT%T.%6N%z") args)))
 
 (defun amx-set-auto-update-interval (symbol value)
   "Custom setter for `amx-auto-update-interval'.
@@ -244,14 +237,17 @@ or symbol."
     (error "Unrecognized command: %s" cmd))))
 
 (defun amx-get-default (choices)
-  "Get the first entry from CHOICES as a string."
-  (amx-augment-command-with-keybind
-   (amx-get-command-name
-    (car
-     (if (listp choices)
-         choices
-       (all-completions "" choices))))
-   (when amx-show-key-bindings (amx-get-keybind-hash))))
+  "Get the first non-ignored entry from CHOICES as a string."
+  (cl-loop
+   for choice in
+   (if (listp choices)
+       choices
+     (amx--debug-message "Getting default from non-list collection might be slow")
+     (all-completions "" choices))
+   for cmd = (amx-get-command-name choice)
+   if (not (amx-command-ignored-p cmd))
+   return (amx-augment-command-with-keybind (format "%s" cmd))
+   finally return nil))
 
 ;;--------------------------------------------------------------------------------
 ;; Amx Interface
@@ -276,8 +272,16 @@ or symbol."
      (lambda (_) (amx-update) (amx-read-and-run amx-cache new-initial-input)))))
 
 (defun amx-read-and-run (commands &optional initial-input)
-  (let* ((amx-origin-buffer
+  (amx--debug-message "Starting amx-read-and-run")
+  (let* ((gc-cons-threshold (* 100 gc-cons-threshold))
+         (amx-origin-buffer
           (or amx-origin-buffer (current-buffer)))
+         (amx-command-keybind-hash
+          (if amx-show-key-bindings
+              (amx-make-keybind-hash)
+            (make-hash-table :size 0)))
+         (def (amx-get-default commands))
+         (_ignore (amx--debug-message "Got default: %s" def))
          (commands
           ;; Add key bindings to completions
           (if amx-show-key-bindings
@@ -293,10 +297,14 @@ or symbol."
                            commands
                            (lambda (cmd) (not (amx-command-ignored-p cmd)))
                            nil))
+
+         (_ignore (amx--debug-message "Ready to call amx-completing-read"))
          ;; Symbol
          (chosen-item
           (amx-clean-command-name
-           (amx-completing-read collection :initial-input initial-input)))
+           (amx-completing-read collection
+                                :initial-input initial-input
+                                :def def)))
          ;; String
          (chosen-item-name (symbol-name chosen-item)))
     (cl-assert (commandp chosen-item))
@@ -353,7 +361,7 @@ know exactly which functions each one uses to exit the
 minibuffer.."
   (execute-kbd-macro (kbd "RET")))
 
-(cl-defun amx-completing-read (choices &key initial-input predicate backend)
+(cl-defun amx-completing-read (choices &key initial-input predicate def backend)
   (when backend
     (amx-load-backend backend))
   (let ((amx-backend (or backend amx-backend)))
@@ -362,9 +370,11 @@ minibuffer.."
     ;; available
     (let ((amx-minibuffer-depth (1+ (minibuffer-depth)))
           (comp-fun (amx-backend-comp-fun (amx-get-backend))))
-      (funcall comp-fun choices :initial-input initial-input
+      (funcall comp-fun choices
+               :initial-input initial-input
                ;; Work around a bug
-               :predicate (or predicate #'identity)))))
+               :predicate (or predicate #'identity)
+               :def def))))
 
 (defun amx-prompt-with-prefix-arg ()
   (let ((amx-prompt-string
@@ -413,12 +423,14 @@ minibuffer.."
    ((plist-get amx-known-backends backend))
    (t (error "Unknown amx backed %S" backend))))
 
-(cl-defun amx-completing-read-default (choices &key initial-input predicate)
+(cl-defun amx-completing-read-default (choices &key initial-input predicate def)
   "Amx backend for default Emacs completion"
+  (amx--debug-message "Preparing default-style completion")
   (require 'minibuf-eldef)
   (let ((minibuffer-completion-table choices)
         (prompt (concat (amx-prompt-with-prefix-arg)
-                        (format "[%s]: " (amx-get-default choices))))
+                        (when def
+                          (format "[%s]: " def))))
         (prev-eldef-mode minibuffer-electric-default-mode))
     (unwind-protect
         (progn
@@ -427,10 +439,10 @@ minibuffer.."
               (lambda ()
                 (use-local-map (make-composed-keymap
                                 (list amx-map (current-local-map)))))
+            (amx--debug-message "Starting default-style completion")
             (completing-read-default
              prompt choices predicate t initial-input
-             'extended-command-history
-             (amx-get-default choices))))
+             'extended-command-history def)))
       (minibuffer-electric-default-mode
        (if prev-eldef-mode 1 0)))))
 
@@ -447,15 +459,14 @@ May not work for things like ido and ivy."
 
 (declare-function ido-completing-read+ "ext:ido-completing-read+")
 
-(cl-defun amx-completing-read-ido (choices &key initial-input predicate)
+(cl-defun amx-completing-read-ido (choices &key initial-input predicate def)
   "Amx backend for ido completion"
   (require 'ido-completing-read+)
   (let ((ido-completion-map ido-completion-map)
         (ido-setup-hook (cons 'amx-prepare-ido-bindings ido-setup-hook))
         (minibuffer-completion-table choices))
     (ido-completing-read+ (amx-prompt-with-prefix-arg) choices predicate t
-                          initial-input 'extended-command-history
-                          (amx-get-default choices))))
+                          initial-input 'extended-command-history def)))
 
 (defun amx-ido-get-text ()
   ido-text)
@@ -468,7 +479,7 @@ May not work for things like ido and ivy."
 
 (declare-function ivy-read "ext:ivy")
 
-(cl-defun amx-completing-read-ivy (choices &key initial-input predicate)
+(cl-defun amx-completing-read-ivy (choices &key initial-input predicate def)
   "Amx backend for ivy completion"
   (require 'ivy)
   (ivy-read (amx-prompt-with-prefix-arg) choices
@@ -476,7 +487,7 @@ May not work for things like ido and ivy."
             :keymap amx-map
             :history 'extended-command-history
             :initial-input initial-input
-            :preselect (amx-get-default choices)))
+            :preselect def))
 
 (defvar ivy-text)
 
@@ -489,7 +500,7 @@ May not work for things like ido and ivy."
  :get-text-fun 'amx-ivy-get-text
  :required-feature 'ivy)
 
-(cl-defun amx-completing-read-auto (choices &key initial-input predicate)
+(cl-defun amx-completing-read-auto (choices &key initial-input predicate def)
   "Automatically select between ivy, ido, and standard completion."
   (let ((backend
          (cond
@@ -502,6 +513,7 @@ May not work for things like ido and ivy."
     (amx-completing-read choices
                          :initial-input initial-input
                          :predicate predicate
+                         :def def
                          :backend backend)))
 
 (amx-define-backend
@@ -606,7 +618,8 @@ By default, an appropriate method is selected based on whether
   (amx--debug-message "Doing full update")
   (amx-save-history)
   (amx-rebuild-cache)
-  (setq amx-last-update-time (current-time)))
+  (setq amx-last-update-time (current-time))
+  (amx--debug-message "Finished full update"))
 
 (defun amx-detect-new-commands ()
   "Return non-nil if the number of defined commands has changed.
@@ -854,60 +867,8 @@ symbol by itself."
           (puthash cmd (key-description kseq) bindhash)
           ;; "cmd (key)" => cmd, for looking up the original command
           (puthash (format "%s (%s)" cmd (key-description kseq)) cmd bindhash))
+     finally do (amx--debug-message "Finished building new keybind hash table.")
      finally return bindhash)))
-
-(defun amx-invalidate-keybind-hash ()
-  "Force a rebuild of `amx-command-keybind-hash'.
-
-This function takes any number of arguments and ignores them so
-that it can be used as advice on other functions."
-  (amx--debug-message "Invaliding keybind hash table.")
-  (setq amx-command-keybind-hash nil
-        amx-last-active-maps nil))
-
-(defun amx-maybe-invalidate-keybind-hash ()
-  "If `amx-command-keybind-hash' is stale, set it to nil.
-
-Returns non-nil if the hash is still valid and nil if it was
-invalidated. This uses `amx-last-active-maps' to figure out if
-the set of active keymaps has changed since the last rebuild of
-`amx-command-keybind-hash'. Note that this function does not, by
-itself, detect when new keys are bound in the current active
-keymaps."
-  (let ((valid
-         (and amx-command-keybind-hash
-              amx-last-active-maps
-              (equal
-               amx-last-active-maps
-               (with-current-buffer (or amx-origin-buffer (current-buffer))
-                 (current-active-maps))))))
-    (unless valid
-      (amx--debug-message
-       "Forcing an update of `amx-command-keybind-hash' because `(current-active-maps)' changed.")
-      (amx-invalidate-keybind-hash))
-    valid))
-
-(defun amx-get-keybind-hash ()
-  "Update (if needed) and return `amx-command-keybind-hash'."
-  (amx-maybe-invalidate-keybind-hash)
-  (or amx-command-keybind-hash
-      (setq amx-command-keybind-hash (amx-make-keybind-hash))))
-
-;; Since keymaps can contain other keymaps, checking whether these
-;; functions are affecting the current active maps (or any maps
-;; contained in them) is not much faster than just rebuilding the hash
-;; table from scratch. So we just invalidate the keybind hash table
-;; every time a keymap is modified outside the minibuffer.
-
-(defun amx-invalidate-keybind-hash-on-keymap-change (&rest args)
-  (unless (minibufferp)
-    (amx--debug-message
-       "Forcing an update of `amx-command-keybind-hash' because a keymap was modified.")
-    (amx-invalidate-keybind-hash)))
-
-(cl-loop
- for fun in '(define-key set-keymap-parent)
- do (advice-add fun :before 'amx-invalidate-keybind-hash-on-keymap-change))
 
 (defun amx-augment-command-with-keybind (command &optional bind-hash)
   (let* ((cmdname (amx-get-command-name command))
@@ -933,7 +894,7 @@ In the returned list, each element will be a string."
   (cl-loop
    ;; Default to `amx-command-keybind-hash', updating it if
    ;; necessary.
-   with bind-hash = (or bind-hash (amx-get-keybind-hash))
+   with bind-hash = (or bind-hash amx-command-keybind-hash)
    for cmd in commands
    collect (amx-augment-command-with-keybind cmd bind-hash)))
 
@@ -1147,26 +1108,28 @@ sorted by frequency of use."
 Optional argument FORCE tells amx to completely rebuild all of
 its cached data, even if it believes that data is already
 current."
-  (amx-initialize)
-  (let ((do-recount
-         (or force
-             ;; If periodic updates are enabled, force a full search
-             ;; for new commands after the auto-update interval has
-             ;; elapsed.
-             (and amx-auto-update-interval
-                  amx-last-update-time
-                  (> (float-time (time-since amx-last-update-time))
-                     (* 60 amx-auto-update-interval))))))
-    (amx-update-if-needed do-recount))
-  (when force
-    (amx--debug-message
-       "Forcing an update of `amx-command-keybind-hash'.")
-    (amx-invalidate-keybind-hash))
-  (amx-get-keybind-hash))
+  (unless (and (amx-active)
+               (minibufferp))
+    (amx-initialize)
+    (let ((do-recount
+           (or force
+               ;; If periodic updates are enabled, force a full search
+               ;; for new commands after the auto-update interval has
+               ;; elapsed.
+               (and amx-auto-update-interval
+                    amx-last-update-time
+                    (> (float-time (time-since amx-last-update-time))
+                       (* 60 amx-auto-update-interval))))))
+      (amx-update-if-needed do-recount))))
 
 ;; This does a quick update every time emacs is idle
-(setq amx-short-idle-update-timer
-      (run-with-idle-timer 1 t 'amx-idle-update))
+(progn
+  ;; Make sure we don't run multiple instances of the timer when
+  ;; re-evaluating this file multiple times
+  (when amx-short-idle-update-timer
+    (cancel-timer amx-short-idle-update-timer))
+  (setq amx-short-idle-update-timer
+      (run-with-idle-timer 1 t 'amx-idle-update)))
 
 (provide 'amx)
 ;;; amx.el ends here
