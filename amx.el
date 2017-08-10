@@ -116,6 +116,17 @@ If nil, a `amx-update' is needed ASAP.")
     (when (eq (global-key-binding [remap execute-extended-command]) 'amx)
       (global-unset-key [remap execute-extended-command]))))
 
+(define-minor-mode amx-debug-mode
+  "If non-nil, amx will print debug info.
+
+Debug info is printed to the *Messages* buffer."
+  :global t
+  :group 'amx)
+
+(defsubst amx--debug-message (format-string &rest args)
+  (when amx-debug-mode
+    (apply #'message (concat "amx: " format-string) args)))
+
 (defun amx-set-auto-update-interval (symbol value)
   "Custom setter for `amx-auto-update-interval'.
 
@@ -240,7 +251,7 @@ or symbol."
      (if (listp choices)
          choices
        (all-completions "" choices))))
-   (when amx-show-key-bindings (amx-update-keybind-hash))))
+   (when amx-show-key-bindings (amx-get-keybind-hash))))
 
 ;;--------------------------------------------------------------------------------
 ;; Amx Interface
@@ -346,6 +357,7 @@ minibuffer.."
   (when backend
     (amx-load-backend backend))
   (let ((amx-backend (or backend amx-backend)))
+    (amx--debug-message "Doing completion using backend `%s'" amx-backend)
     ;; Need to do this to ensure that the specified backend is
     ;; available
     (let ((amx-minibuffer-depth (1+ (minibuffer-depth)))
@@ -486,6 +498,7 @@ May not work for things like ido and ivy."
                (bound-and-true-p ido-ubiquitous-mode))
            'ido)
           (t 'standard))))
+    (amx--debug-message "Auto-selected backend `%s'" backend)
     (amx-completing-read choices
                          :initial-input initial-input
                          :predicate predicate
@@ -561,9 +574,6 @@ By default, an appropriate method is selected based on whether
   (setq amx-cache (sort amx-cache 'amx-sorting-rules))
   (amx-restore-history))
 
-(defun amx-convert-for-ido (command-items)
-  (mapcar (lambda (command-item) (symbol-name (car command-item))) command-items))
-
 (defun amx-restore-history ()
   "Rearranges `amx-cache' according to `amx-history'"
   (if (> (length amx-history) amx-history-length)
@@ -593,6 +603,7 @@ By default, an appropriate method is selected based on whether
 
 (defun amx-update ()
   (interactive)
+  (amx--debug-message "Doing full update")
   (amx-save-history)
   (amx-rebuild-cache)
   (setq amx-last-update-time (current-time)))
@@ -613,10 +624,11 @@ If `amx-last-update-time' is nil, do an update unconditionally.
 Otherwise, if optional arg COUNT-COMMANDS is non-nil, count the
 total number of defined commands in `obarray' and update if it
 has changed."
-  (when (or (null amx-last-update-time)
+  (if (or (null amx-last-update-time)
             (and count-commands
                  (amx-detect-new-commands)))
-    (amx-update)))
+      (amx-update)
+    (amx--debug-message "No update needed at this time.")))
 
 ;;;###autoload
 (defun amx-initialize (&optional reinit)
@@ -815,6 +827,7 @@ are mappings of command symbols to key bindings, while string
 keys are mappings of string representations of the command and
 its binding together, e.g. \"forward-char (C-f)\", to the command
 symbol by itself."
+  (amx--debug-message "Building new keybind hash table.")
   (let* ((keymap-list
           (cond
            ((keymapp keymap)
@@ -843,11 +856,12 @@ symbol by itself."
           (puthash (format "%s (%s)" cmd (key-description kseq)) cmd bindhash))
      finally return bindhash)))
 
-(defun amx-invalidate-keybind-hash (&rest _args)
+(defun amx-invalidate-keybind-hash ()
   "Force a rebuild of `amx-command-keybind-hash'.
 
 This function takes any number of arguments and ignores them so
 that it can be used as advice on other functions."
+  (amx--debug-message "Invaliding keybind hash table.")
   (setq amx-command-keybind-hash nil
         amx-last-active-maps nil))
 
@@ -868,14 +882,13 @@ keymaps."
                (with-current-buffer (or amx-origin-buffer (current-buffer))
                  (current-active-maps))))))
     (unless valid
+      (amx--debug-message
+       "Forcing an update of `amx-command-keybind-hash' because `(current-active-maps)' changed.")
       (amx-invalidate-keybind-hash))
     valid))
 
-(defun amx-update-keybind-hash ()
-  "Update (if needed) and return `amx-command-keybind-hash'.
-
- If so, it rebuilds it based on the
-current set of active keymaps.e"
+(defun amx-get-keybind-hash ()
+  "Update (if needed) and return `amx-command-keybind-hash'."
   (amx-maybe-invalidate-keybind-hash)
   (or amx-command-keybind-hash
       (setq amx-command-keybind-hash (amx-make-keybind-hash))))
@@ -883,10 +896,18 @@ current set of active keymaps.e"
 ;; Since keymaps can contain other keymaps, checking whether these
 ;; functions are affecting the current active maps (or any maps
 ;; contained in them) is not much faster than just rebuilding the hash
-;; table from scratch.
+;; table from scratch. So we just invalidate the keybind hash table
+;; every time a keymap is modified outside the minibuffer.
+
+(defun amx-invalidate-keybind-hash-on-keymap-change (&rest args)
+  (unless (minibufferp)
+    (amx--debug-message
+       "Forcing an update of `amx-command-keybind-hash' because a keymap was modified.")
+    (amx-invalidate-keybind-hash)))
+
 (cl-loop
  for fun in '(define-key set-keymap-parent)
- do (advice-add fun :before 'amx-invalidate-keybind-hash))
+ do (advice-add fun :before 'amx-invalidate-keybind-hash-on-keymap-change))
 
 (defun amx-augment-command-with-keybind (command &optional bind-hash)
   (let* ((cmdname (amx-get-command-name command))
@@ -912,7 +933,7 @@ In the returned list, each element will be a string."
   (cl-loop
    ;; Default to `amx-command-keybind-hash', updating it if
    ;; necessary.
-   with bind-hash = (or bind-hash (amx-update-keybind-hash))
+   with bind-hash = (or bind-hash (amx-get-keybind-hash))
    for cmd in commands
    collect (amx-augment-command-with-keybind cmd bind-hash)))
 
@@ -1138,8 +1159,10 @@ current."
                      (* 60 amx-auto-update-interval))))))
     (amx-update-if-needed do-recount))
   (when force
+    (amx--debug-message
+       "Forcing an update of `amx-command-keybind-hash'.")
     (amx-invalidate-keybind-hash))
-  (amx-update-keybind-hash))
+  (amx-get-keybind-hash))
 
 ;; This does a quick update every time emacs is idle
 (setq amx-short-idle-update-timer

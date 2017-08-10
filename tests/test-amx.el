@@ -276,7 +276,7 @@ equal."
                           :predicate predicate
                           :backend backend))))
       (spy-on 'amx-augment-commands-with-keybinds :and-call-through)
-      (spy-on 'amx-update-keybind-hash :and-call-through)
+      (spy-on 'amx-get-keybind-hash :and-call-through)
       (spy-on 'amx-make-keybind-hash :and-call-through)
       (spy-on 'amx-invalidate-keybind-hash :and-call-through)
       ;; Don't actually execute selected commands
@@ -368,7 +368,7 @@ equal."
                   :to-have-been-called-with nil "my-temp-command")
           (expect 'amx-augment-commands-with-keybinds
                   :to-have-been-called)
-          (expect 'amx-update-keybind-hash
+          (expect 'amx-get-keybind-hash
                   :to-have-been-called)))))
 
   (describe "auto-update functionality"
