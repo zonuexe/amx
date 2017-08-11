@@ -104,7 +104,9 @@ If nil, a `amx-update' is needed ASAP.")
   (if amx-mode
       (progn
         (amx-initialize)
+        (add-hook 'auto-save-hook 'amx-save-to-file)
         (global-set-key [remap execute-extended-command] 'amx))
+    (remove-hook 'auto-save-hook 'amx-save-to-file)
     (when (eq (global-key-binding [remap execute-extended-command]) 'amx)
       (global-unset-key [remap execute-extended-command]))))
 
