@@ -38,7 +38,15 @@
 (defvar amx-data)
 (defvar amx-history)
 (defvar amx-backend)
+
+;; Variables used from other packages
 (defvar smex-save-file)
+(defvar ivy-mode)
+(defvar ivy-text)
+(defvar ido-mode)
+(defvar ido-ubiquitous-mode)
+(defvar ido-completion-map)
+(defvar ido-text)
 
 (defvar amx-command-count 0
   "Number of commands known to amx.")
@@ -359,7 +367,6 @@ or symbol."
     keymap))
 
 (defun amx-prepare-ido-bindings ()
-  ;; FIXME: defvar ido vars?
   (setq ido-completion-map
         (make-composed-keymap (list amx-ido-map ido-completion-map))))
 
@@ -498,8 +505,6 @@ May not work for things like ido and ivy."
             :history 'extended-command-history
             :initial-input initial-input
             :preselect def))
-
-(defvar ivy-text)
 
 (defun amx-ivy-get-text ()
   ivy-text)
