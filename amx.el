@@ -72,7 +72,7 @@ This is used to determine which buffer's key bindings to use when
   "Plist of known amx completion backends.")
 
 (defvar amx-temp-prompt-string nil
-  "if non-nil, overrides `amx-prompt-string' once.
+  "If non-nil, overrides `amx-prompt-string' once.
 
 Each time `amx-prompt-with-prefix-arg' is called, this is reset
 to nil.")
@@ -126,6 +126,9 @@ Debug info is printed to the *Messages* buffer."
   :group 'amx)
 
 (defsubst amx--debug-message (format-string &rest args)
+  "Send a message prefixed with \"amx\" and the current time.
+
+This has no effect unless `amx-debug-mode' is enabled."
   (when amx-debug-mode
     (apply #'message (concat "amx (%s): " format-string)
            (format-time-string "%FT%T.%6N%z") args)))
@@ -272,6 +275,11 @@ or symbol."
 
 ;;;###autoload
 (defun amx ()
+  "Read a command name and execute the command.
+
+This is the main entry point for the Amx package, an alternative
+to the normal \\[execute-extended-command] built into Emacs that
+provides several extra features."
   (interactive)
   (amx-initialize)
   (if (amx-active)
@@ -280,16 +288,21 @@ or symbol."
     (amx-read-and-run amx-cache)))
 
 (defun amx-active ()
-  "Return non-nil if amx is currently using the minibuffer"
+  "Return non-nil if amx is currently using the minibuffer."
   (>= amx-minibuffer-depth (minibuffer-depth)))
 
 (defun amx-update-and-rerun ()
+  "Check for newly defined commands and re-run `amx'."
   (let ((new-initial-input
          (funcall (amx-backend-get-text-fun (amx-get-backend)))))
     (amx-do-with-selected-item
      (lambda (_) (amx-update) (amx-read-and-run amx-cache new-initial-input)))))
 
 (defun amx-read-and-run (commands &optional initial-input)
+  "Prompt the user using Amx to choose one of COMMANDS and run it.
+
+INITIAL-INPUT has the same meaning as in
+`completing-read'."
   (amx--debug-message "Starting amx-read-and-run")
   (let* ((amx-origin-buffer
           (or amx-origin-buffer (current-buffer)))
@@ -367,6 +380,9 @@ or symbol."
     keymap))
 
 (defun amx-prepare-ido-bindings ()
+  "Add Amx bindings to the ido completion map.
+
+This must be run from `ido-setup-hook'."
   (setq ido-completion-map
         (make-composed-keymap (list amx-ido-map ido-completion-map))))
 
@@ -394,6 +410,7 @@ minibuffer.."
                :def def))))
 
 (defun amx-prompt-with-prefix-arg ()
+  "Return `amx-prompt-string' with the prefix arg prepended."
   (let ((amx-prompt-string
          (or amx-temp-prompt-string amx-prompt-string)))
     (setq amx-temp-prompt-string nil)
@@ -486,6 +503,7 @@ May not work for things like ido and ivy."
                           initial-input 'extended-command-history def)))
 
 (defun amx-ido-get-text ()
+  "Function to return the user's entered text for ido."
   ido-text)
 
 (amx-define-backend
@@ -507,6 +525,7 @@ May not work for things like ido and ivy."
             :preselect def))
 
 (defun amx-ivy-get-text ()
+  "Function to return the user's entered text for ivy."
   ivy-text)
 
 (amx-define-backend
@@ -534,8 +553,8 @@ May not work for things like ido and ivy."
 (amx-define-backend
  :name 'auto
  :comp-fun 'amx-completing-read-auto
- :get-text-fun (lambda () (error "This exit function should never be called."))
- :exit-fun (lambda () (error "This get-text function should never be called.")))
+ :get-text-fun (lambda () (error "This exit function should never be called"))
+ :exit-fun (lambda () (error "This get-text function should never be called")))
 
 (defun amx-load-backend (backend)
   "Load all required features for BACKEND."
@@ -582,7 +601,7 @@ By default, an appropriate method is selected based on whether
 ;; Cache and Maintenance
 
 (defun amx-rebuild-cache ()
-  (interactive)
+  "Add newly defined commands to  `amx-cache'."
   (setq amx-cache nil)
 
   ;; Build up list 'new-commands' and later put it at the end of 'amx-cache'.
@@ -602,7 +621,7 @@ By default, an appropriate method is selected based on whether
   (amx-restore-history))
 
 (defun amx-restore-history ()
-  "Rearranges `amx-cache' according to `amx-history'"
+  "Rearrange `amx-cache' according to `amx-history'."
   (if (> (length amx-history) amx-history-length)
       (setcdr (nthcdr (- amx-history-length 1) amx-history) nil))
   (mapc (lambda (command)
@@ -619,7 +638,7 @@ By default, an appropriate method is selected based on whether
         (reverse amx-history)))
 
 (defun amx-sort-according-to-cache (list)
-  "Sorts a list of commands by their order in `amx-cache'"
+  "Sort LIST of commands by their order in `amx-cache'."
   (let (sorted)
     (dolist (command-item amx-cache)
       (let ((command (car command-item)))
@@ -629,6 +648,7 @@ By default, an appropriate method is selected based on whether
     (nreverse (append list sorted))))
 
 (defun amx-update ()
+  "Update the Amx cache with any newly-defined commands."
   (interactive)
   (amx--debug-message "Doing full update")
   (amx-save-history)
@@ -677,11 +697,11 @@ provided."
     (setq amx-initialized t)))
 
 (defsubst amx-buffer-not-empty-p ()
-  "Returns non-nil if current buffer contains a non-space character."
+  "Return non-nil if current buffer contains a non-space character."
   (string-match-p "\[^[:space:]\]" (buffer-string)))
 
 (defun amx-load-save-file ()
-  "Loads `amx-history' and `amx-data' from `amx-save-file'.
+  "Load `amx-history' and `amx-data' from `amx-save-file'.
 
 In order to facilitate migrating from smex, if `amx-save-file'
 does not exist, but smex is loaded and `smex-save-file' exists,
@@ -703,21 +723,21 @@ copy `smex-save-file' to `amx-save-file' and load it."
                 (setq amx-history (read (current-buffer))
                       amx-data    (read (current-buffer)))
               (error (if (amx-buffer-not-empty-p)
-                         (error "Invalid data in amx-save-file (%s). Can't restore history."
+                         (error "Invalid data in amx-save-file (%s). Can't restore history"
                                 amx-save-file)
                        (unless (boundp 'amx-history) (setq amx-history nil))
                        (unless (boundp 'amx-data)    (setq amx-data nil)))))))))))
 
 (defun amx-save-history ()
-  "Updates `amx-history'"
+  "Update `amx-history'."
   (setq amx-history
         (cl-loop
          for i from 1 upto amx-history-length
          for (command-name . count) in amx-cache
          collect command-name)))
 
-;; A copy of `ido-pp' that's compatible with lexical bindings
 (defun amx-pp* (list list-name)
+  "Helper function for `amx-pp'."
   (let ((print-level nil) (eval-expression-print-level nil)
         (print-length nil) (eval-expression-print-length nil))
     (insert "\n;; ----- " list-name " -----\n(\n ")
@@ -733,9 +753,11 @@ copy `smex-save-file' to `amx-save-file' and load it."
     (insert "\n)\n")))
 
 (defmacro amx-pp (list-var)
+  "A copy of `ido-pp' that's compatible with lexical bindings."
   `(amx-pp* ,list-var ,(symbol-name list-var)))
 
 (defun amx-save-to-file ()
+  "Save Amx history and cache to `amx-save-file' for future sessions."
   (interactive)
   ;; If `init-file-user' is nil, we are running under "emacs -Q", so
   ;; don't save anything to disk
@@ -751,7 +773,7 @@ copy `smex-save-file' to `amx-save-file' and load it."
 ;; Ranking
 
 (defun amx-sorting-rules (command-item other-command-item)
-  "Returns true if COMMAND-ITEM should sort before OTHER-COMMAND-ITEM."
+  "Return true if COMMAND-ITEM should sort before OTHER-COMMAND-ITEM."
   (let* ((count        (or (cdr command-item      ) 0))
          (other-count  (or (cdr other-command-item) 0))
          (name         (car command-item))
@@ -800,7 +822,7 @@ copy `smex-save-file' to `amx-save-file' and load it."
               1))))
 
 (defun amx-sort-item-at (n)
-  "Sorts item at position N in `amx-cache'."
+  "Sort item at position N in `amx-cache'."
   (let* ((command-cell (nthcdr n amx-cache))
          (command-item (car command-cell)))
     (let ((insert-at (amx-detect-position
@@ -815,29 +837,29 @@ copy `smex-save-file' to `amx-save-file' and load it."
         (setq insert-at (+ n (- insert-at 1)))
         (amx-insert-cell command-cell insert-at amx-cache)))))
 
-(defun amx-detect-position (cell function)
-  "Detects, relatively to CELL, the position of the cell
-on which FUNCTION returns true.
-Only checks cells after CELL, starting with the cell right after CELL.
-Returns nil when reaching the end of the list."
+(defun amx-detect-position (cell pred)
+  "Find the position of the first element in `(cdr CELL)' matching PRED.
+
+Only checks cells after CELL, starting with the cell right after
+CELL. Returns nil if no element after CELL matches PRED."
   (let ((pos 1))
     (catch 'break
       (while t
         (setq cell (cdr cell))
         (if (not cell)
             (throw 'break nil)
-          (if (funcall function cell) (throw 'break pos))
+          (if (funcall pred cell) (throw 'break pos))
           (setq pos (1+ pos)))))))
 
 (defun amx-remove-nth-cell (n list)
-  "Removes and returns the Nth cell in LIST."
+  "Remove and return the Nth cell in LIST."
   (let* ((previous-cell (nthcdr (- n 1) list))
          (result (cdr previous-cell)))
     (setcdr previous-cell (cdr result))
     result))
 
 (defun amx-insert-cell (new-cell n list)
-  "Inserts cell at position N in LIST."
+  "Insert NEW-CELL at position N in LIST."
   (let* ((cell (nthcdr (- n 1) list))
          (next-cell (cdr cell)))
     (setcdr (setcdr cell new-cell) next-cell)))
@@ -886,6 +908,10 @@ symbol by itself."
      finally return bindhash)))
 
 (defun amx-augment-command-with-keybind (command &optional bind-hash)
+  "Append COMMAND's key binding to COMMAND.
+
+The key binding is looked up in BIND-HASH. If a binding is not
+found for COMMAND, the command's name is returned alone."
   (let* ((cmdname (amx-get-command-name command))
          (cmdsym (intern cmdname))
          (keybind (and bind-hash (gethash cmdsym bind-hash))))
@@ -914,11 +940,13 @@ In the returned list, each element will be a string."
    collect (amx-augment-command-with-keybind cmd bind-hash)))
 
 (defun amx-clean-command-name (command-name)
-  "Inverse of `amx-augment-commands-with-keybind', approximately.
+  "Trim the key binding off the end of a command name.
 
-Given a string starting with a command name and possibly ending
-with a key binding, it returns just the command name as a
-symbol."
+For example, given \"forward-char (C-f)\", this would return
+\"forward-char\".
+
+This is roughly the inverse of
+`amx-augment-command-with-keybind'."
   (or
    ;; First try getting it from the hash table
    (and amx-command-keybind-hash
@@ -1034,16 +1062,19 @@ reversing the effect of a previous `amx-ignore'. "
   (amx-exit-minibuffer))
 
 (defun amx-describe-function ()
+  "Exit the minibuffer and call `describe-function' on selected item."
   (interactive)
   (amx-do-with-selected-item (lambda (chosen)
                                (describe-function chosen)
                                (pop-to-buffer "*Help*"))))
 
 (defun amx-where-is ()
+  "Exit the minibuffer and call `where-is' on selected item."
   (interactive)
   (amx-do-with-selected-item 'where-is))
 
 (defun amx-find-function ()
+  "Exit the minibuffer and call `find-function' on selected item."
   (interactive)
   (amx-do-with-selected-item 'find-function))
 
@@ -1087,8 +1118,7 @@ reversing the effect of a previous `amx-ignore'. "
     commands))
 
 (defun amx-show-unbound-commands ()
-  "Shows unbound commands in a new buffer,
-sorted by frequency of use."
+  "Show unbound commands in a new buffer sorted by frequency of use."
   (interactive)
   (setq amx-data (sort amx-data 'amx-sorting-rules))
   (let ((unbound-commands (delq nil
@@ -1108,7 +1138,7 @@ sorted by frequency of use."
 ;; Auto Update
 
 (defun amx-post-eval-force-update (&rest _args)
-  ;; Setting this will force an update the next time Emacs is idle
+  "Schedule an amx update the next time Emacs is idle."
   (setq amx-last-update-time nil))
 
 ;; It's pretty much impossible to define a new command without going
