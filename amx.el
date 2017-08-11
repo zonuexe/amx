@@ -281,8 +281,7 @@ or symbol."
 
 (defun amx-read-and-run (commands &optional initial-input)
   (amx--debug-message "Starting amx-read-and-run")
-  (let* ((gc-cons-threshold (* 100 gc-cons-threshold))
-         (amx-origin-buffer
+  (let* ((amx-origin-buffer
           (or amx-origin-buffer (current-buffer)))
          (amx-command-keybind-hash
           (if amx-show-key-bindings
