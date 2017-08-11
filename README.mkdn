@@ -8,12 +8,6 @@ systems for selecting commands, such as
 [ido](https://github.com/DarwinAwardWinner/ido-completing-read-plus)
 and [ivy](https://github.com/abo-abo/swiper/).
 
-Amx is a fork of [Smex](https://github.com/nonsequitur/smex), which
-appears to no longer be under active development. However, Amx has
-diverged significantly from Smex and should be considered a separate
-package. Since the last tagged release of Smex was version 3.0, the
-first release version of Amx will be 4.0.
-
 ## Installation
 
 Amx is not yet available in MELPA or another package repository for
@@ -127,3 +121,14 @@ install all the development dependencies, in particular
 Finally, to run the tests, execute `cask exec buttercup -L .`. Please
 run this test suite before submitting any pull requests, and note in
 the pull request whether any of the tests fail.
+
+## Relationship to Smex
+
+Amx is a fork of [Smex](https://github.com/nonsequitur/smex), which
+appears to no longer be under active development. However, Amx has
+diverged significantly from Smex and should be considered a separate
+package. New features include multiple completion backends,
+showing/completing on key bindings, and hiding irrelevant commands.
+
+Since the last tagged release of Smex was version 3.0, the first
+release version of Amx will be 4.0.
