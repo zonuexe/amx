@@ -107,6 +107,16 @@ commands in the list of completions, but just in case, it will still
 let you enter them if you know their name. You can tell Amx to ignore
 additional commands by customizing `amx-ignored-command-matchers`.
 
+### Speeding up Amx
+
+There are two features that can cause a noticeable delay (around 1/4
+of a second) when running `amx`: command ignoring and showing key
+bindings. Generally this delay is not a problem, since you can start
+typing imediately and Amx will catch up after the short delay.
+However, if it bothers you, these delays can be greatly reduced by
+setting one or both of `amx-ignored-command-matchers` and
+`amx-show-key-bindings` to nil.
+
 ## Running the tests
 
 Amx comes with a test suite. If you want to run it yourself, first

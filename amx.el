@@ -187,7 +187,11 @@ Variables stored are: `amx-data', `amx-history'."
   :type 'integer)
 
 (defcustom amx-show-key-bindings t
-  "If non-nil, show key binding while completing commands."
+  "If non-nil, show key binding while completing commands.
+
+Enabling this feature can cause a noticeable delay when running
+`amx', so you may wish to disable it (by setting this variable to
+nil) if you don't find it useful."
   :type 'boolean)
 
 (defcustom amx-prompt-string "M-x "
@@ -212,7 +216,11 @@ exact name).
 
 Note that if you want an exact match, the Elisp regular
 expression anchors for start and end of string are \"\\`\" and
-\"\\'\", respectively."
+\"\\'\", respectively.
+
+Enabling this feature can cause a noticeable delay when running
+`amx', so you may wish to disable it (by setting this variable to
+nil) if you don't find it useful."
   :type '(repeat
           (choice
            (regexp :tag "Regular expression")
@@ -290,14 +298,15 @@ or symbol."
                commands)
             commands))
          (collection
-          ;; Initially complete with only non-ignored commands, but if
-          ;; all of those are ruled out, allow completing with ignored
-          ;; commands.
-          (apply-partially #'completion-table-with-predicate
-                           commands
-                           (lambda (cmd) (not (amx-command-ignored-p cmd)))
-                           nil))
-
+          (if amx-ignored-command-matchers
+              ;; Initially complete with only non-ignored commands,
+              ;; but if all of those are ruled out, allow completing
+              ;; with ignored commands.
+              (apply-partially #'completion-table-with-predicate
+                               commands
+                               (lambda (cmd) (not (amx-command-ignored-p cmd)))
+                               nil)
+            commands))
          (_ignore (amx--debug-message "Ready to call amx-completing-read"))
          ;; Symbol
          (chosen-item
