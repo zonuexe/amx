@@ -128,12 +128,10 @@ equal."
     ;; Override `require' to return nil to prevent loading of new features
     (spy-on 'require :and-return-value nil)
     (expect
-     (lambda ()
-       (customize-set-variable 'amx-backend 'ido))
+     (customize-set-variable 'amx-backend 'ido)
      :to-throw)
     (expect
-     (lambda ()
-       (customize-set-variable 'amx-backend 'ivy))
+     (customize-set-variable 'amx-backend 'ivy)
      :to-throw))
 
   (it "should use the prompt string specified in `amx-prompt-string'"
@@ -462,7 +460,7 @@ equal."
       (when (file-exists-p amx-save-file)
         (delete-file amx-save-file nil))
       (assume (not (file-exists-p amx-save-file)))
-      (expect (lambda () (amx-load-save-file))
+      (expect (amx-load-save-file)
               :not :to-throw))
 
     (it "should not save when `init-file-user' or `amx-save-file' are nil"
