@@ -10,8 +10,4 @@
  (depends-on "with-simulated-input"
              :git "https://github.com/DarwinAwardWinner/with-simulated-input.git"
              :files ("*.el"))
- (depends-on "buttercup"
-             :git "https://github.com/DarwinAwardWinner/emacs-buttercup.git"
-             :branch "expect-closures"
-             :files ("*.el"
-                     ("bin" "bin/*"))))
+ (depends-on "buttercup"))
