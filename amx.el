@@ -340,18 +340,14 @@ INITIAL-INPUT has the same meaning as in
             commands))
          (_ignore (amx--debug-message "Ready to call amx-completing-read"))
          ;; Symbol
-         (chosen-item-name
+         (chosen-item
           (amx-clean-command-name
            (amx-completing-read collection
                                 :initial-input initial-input
                                 :def def)))
          ;; String
-         (chosen-item
-          (if (string= chosen-item-name "")
-              nil
-            (intern chosen-item-name))))
-    (unless (commandp chosen-item)
-      (amx--debug-message "Chosen item is not a command: `%s'" chosen-item))
+         (chosen-item-name (symbol-name chosen-item)))
+    (cl-assert (commandp chosen-item))
     (if amx-custom-action
         (let ((action amx-custom-action))
           (setq amx-custom-action nil)
@@ -959,37 +955,25 @@ For example, given \"forward-char (C-f)\", this would return
 \"forward-char\".
 
 This is roughly the inverse of
-`amx-augment-command-with-keybind', but note that this function
-always accepts and returns a string."
+`amx-augment-command-with-keybind'."
   (or
    ;; First try getting it from the hash table
    (and amx-command-keybind-hash
-        (format "%s" (gethash command-name amx-command-keybind-hash)))
+        (gethash command-name amx-command-keybind-hash))
    ;; Next, chop chars off the end until the result is a command
    (cl-loop
     for s = (cl-copy-seq command-name) then (substring s 0 -1)
     for sym = (intern-soft s)
     if (and sym (commandp sym))
-    return s
+    return sym
     if (= 0 (length s))
     return nil)
    ;; Finally, just take everything up to the first space
    (car (s-match "\\`[^[:space:]]+" command-name))
-   ;; If the string is empty or starts with a space, throw an error.
    (error "Could not find command: %S" command-name)))
 
-(defun amx-get-command-symbol (command-name &optional force)
-  "Return COMMAND-NAME as a symbol, or nil if it is not a command.
-
-If optional argument FORCE is non-nil, return the symbol even if it
-does not correspond to a defined command."
-  (let* ((command-name (format "%s" command-name))
-         (command (intern-soft command-name)))
-    (when (or force (commandp command))
-      command)))
-
 ;;--------------------------------------------------------------------------------
-;; ignored commands
+;; Ignored commands
 
 (defun amx-command-ignored-p (command)
   "Return non-nil if COMMAND is ignored by amx completion.
@@ -999,20 +983,19 @@ See `amx-ignored-command-matchers'."
   ;; command symbol.
   (when (consp command)
     (setq command (car command)))
+  ;; Command might be a string like "CMD (KEY)", requiring a lookup of
+  ;; the real command name
+  (when (stringp command)
+    (setq command (amx-clean-command-name command)))
   (cl-loop
-   ;; Command might be a string like "CMD (KEY)", requiring a lookup
-   ;; of the real command name.
-   with command-name = (if (symbolp command)
-                           (symbol-name command)
-                         (amx-clean-command-name command))
    with matched = nil
    for matcher in amx-ignored-command-matchers
-   ;; regexp matcher
+   ;; regexp
    if (stringp matcher)
-   do (setq matched (string-match-p matcher command-name))
-   ;; function matcher
+   do (setq matched (string-match-p matcher (symbol-name command)))
+   ;; function
    else
-   do (setq matched (funcall matcher command-name))
+   do (setq matched (funcall matcher command))
    if matched return t
    finally return nil))
 
@@ -1024,20 +1007,17 @@ See `amx-ignore-command'."
   ;; command symbol.
   (when (consp command)
     (setq command (car command)))
-  (when (stringp command)
-    (setq command (amx-get-command-symbol command)))
   (get command 'amx-ignored))
 
 (defun amx-command-obsolete-p (command)
   "Return non-nil if COMMAND is marked obsolete."
-  (get (amx-get-command-symbol (amx-clean-command-name command)) 'byte-obsolete-info))
+  (get command 'byte-obsolete-info))
 
 (defun amx-command-mouse-interactive-p (command)
   "Return non-nil if COMMAND uses mouse events.
 
 This is not guaranteed to detect all mouse-interacting commands,
 but it should find most of them."
-  (setq command (amx-get-command-symbol command))
   (and (listp (help-function-arglist command))
        (not (eq ?\& (aref (symbol-name (car (help-function-arglist command))) 0)))
        (stringp (cadr (interactive-form command)))
