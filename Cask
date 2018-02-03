@@ -2,6 +2,7 @@
 (source melpa)
 
 (package-file "amx.el")
+(depends-on "s")
 
 (development
  (depends-on "ido-completing-read+")
