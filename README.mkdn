@@ -13,13 +13,7 @@ and [ivy](https://github.com/abo-abo/swiper/).
 
 ## Installation
 
-Amx is not yet available in MELPA or another package repository for
-easy installation, but it should be soon. Until then, you will need to
-install it manually.
-
-Download `amx.el` from this repository and put it somewhere in your
-emacs `load-path`. Then run `M-x load-library amx` to load it, or put
-`(require 'amx)` in your `.emacs` file.
+You can install amx from [from MELPA](http://melpa.org/#/amx).
 
 If you want to use the
 [ido](https://github.com/DarwinAwardWinner/ido-completing-read-plus)
