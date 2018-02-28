@@ -285,7 +285,7 @@ does not correspond to a defined command."
       cmd))
    ((stringp cmd)
     (amx-get-command-symbol
-     (funcall (if force #'intern #'intern-soft) command-name)
+     (funcall (if force #'intern #'intern-soft) cmd)
      force))
    ((null cmd)
     nil)
