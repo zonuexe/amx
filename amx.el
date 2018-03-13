@@ -579,6 +579,16 @@ May not work for things like ido and ivy."
            'ido)
           (t 'standard))))
     (amx--debug-message "Auto-selected backend `%s'" backend)
+    (condition-case err
+        (amx-load-backend backend)
+      (error
+       (if (eq backend 'standard)
+           (error "Failed to use standard backend.")
+         (display-warning
+          'amx
+          (format "Falling back to standard amx backend due to error loading %s backend: %S"
+                  backend (cadr err)))
+         (setq backend 'standard))))
     (amx-completing-read choices
                          :initial-input initial-input
                          :predicate predicate
