@@ -9,7 +9,7 @@
 ;; Maintainer: Ryan C. Thompson <rct@thompsonclan.org>
 ;; URL: http://github.com/DarwinAwardWinner/amx/
 ;; Package-Requires: ((emacs "24.4") (s "0"))
-;; Version: 4.0
+;; Version: 3.1
 ;; Keywords: convenience, usability
 
 ;; This file is not part of GNU Emacs.
