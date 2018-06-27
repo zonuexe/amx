@@ -308,6 +308,10 @@ does not correspond to a defined command."
 ;;--------------------------------------------------------------------------------
 ;; Amx Interface
 
+(defsubst amx-active ()
+  "Return non-nil if amx is currently using the minibuffer."
+  (>= amx-minibuffer-depth (minibuffer-depth)))
+
 ;;;###autoload
 (defun amx ()
   "Read a command name and execute the command.
@@ -321,10 +325,6 @@ provides several extra features."
       (amx-update-and-rerun)
     (amx-update-if-needed)
     (amx-read-and-run amx-cache)))
-
-(defsubst amx-active ()
-  "Return non-nil if amx is currently using the minibuffer."
-  (>= amx-minibuffer-depth (minibuffer-depth)))
 
 (defun amx-update-and-rerun ()
   "Check for newly defined commands and re-run `amx'.
