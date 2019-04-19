@@ -564,7 +564,8 @@ May not work for things like ido and ivy."
             :keymap amx-map
             :history 'extended-command-history
             :initial-input initial-input
-            :preselect def))
+            :preselect def
+            :caller 'amx-completing-read-ivy))
 
 (defun amx-ivy-get-text ()
   "Function to return the user's entered text for ivy."
