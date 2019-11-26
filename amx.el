@@ -56,6 +56,7 @@
 (defvar ido-ubiquitous-mode)
 (defvar ido-completion-map)
 (defvar ido-text)
+(defvar helm-input)
 
 (defvar amx-command-count 0
   "Number of commands known to amx.")
@@ -577,6 +578,27 @@ May not work for things like ido and ivy."
  :get-text-fun 'amx-ivy-get-text
  :required-feature 'ivy)
 
+(cl-defun amx-completing-read-helm (choices &key initial-input predicate def)
+  "Amx backend for Helm completion"
+  (require 'helm)
+  (helm-comp-read (amx-prompt-with-prefix-arg) choices
+                  :test predicate
+                  :buffer "*Helm Amx*"
+                  :name (s-trim-right amx-prompt-string)
+                  :keymap amx-map
+                  :history 'extended-command-history
+                  :initial-input initial-input
+                  :preselect def))
+
+(defun amx-helm-get-text ()
+  "Function to return the user's entered text for Helm."
+  helm-input)
+
+(amx-define-backend
+ :name 'helm
+ :comp-fun 'amx-completing-read-helm
+ :get-text-fun 'amx-helm-get-text)
+
 (cl-defun amx-completing-read-auto (choices &key initial-input predicate def)
   "Automatically select between ivy, ido, and standard completion."
   (let ((backend
@@ -585,6 +607,7 @@ May not work for things like ido and ivy."
           ((or (bound-and-true-p ido-mode)
                (bound-and-true-p ido-ubiquitous-mode))
            'ido)
+          ((bound-and-true-p helm-mode) 'helm)
           (t 'standard))))
     (amx--debug-message "Auto-selected backend `%s'" backend)
     (condition-case err
@@ -646,6 +669,7 @@ By default, an appropriate method is selected based on whether
           (const :tag "Auto-select" auto)
           (const :tag "Ido" ido)
           (const :tag "Ivy" ivy)
+          (const :tag "Helm" helm)
           (const :tag "Standard" standard)
           (symbol :tag "Custom backend"))
   :set #'amx-set-backend)
